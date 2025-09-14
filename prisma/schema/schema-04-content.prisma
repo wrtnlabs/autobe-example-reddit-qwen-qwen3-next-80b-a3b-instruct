@@ -1,0 +1,129 @@
+/// Main entity representing user posts in communities. Each post belongs to
+/// a community and is authored by a member. Supports soft deletion for
+/// content moderation and preserves historical states through snapshots.
+///
+/// @namespace Content
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model communitybbs_post {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Reference to the community where this post was created. {@link
+  /// communitybbs_community.id}.
+  communitybbs_community_id String
+  
+  /// Reference to the member who authored this post. {@link
+  /// communitybbs_member.id}.
+  communitybbs_member_id String
+  
+  /// Title of the post. Must be between 5 and 120 characters according to
+  /// business requirements. Truncated if longer.
+  title String
+  
+  /// Body content of the post. Must be between 10 and 10,000 characters
+  /// according to business requirements. Contains plain text only with line
+  /// breaks. No HTML or code allowed.
+  body String
+  
+  /// Display name of the author as shown on the post. If not provided by user,
+  /// defaults to 'Anonymous'. Truncated to 32 characters if longer. Not a
+  /// reference to member profile - stored here for consistency even if member
+  /// changes display name.
+  display_name String?
+  
+  /// Timestamp when the post was created. Always set at time of creation and
+  /// never modified.
+  created_at DateTime
+  
+  /// Timestamp when the post was last updated. Set on any edit operation.
+  updated_at DateTime
+  
+  /// Timestamp when the post was soft-deleted. Null if not deleted. Enforces
+  /// soft-delete policy for content moderation.
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  community communitybbs_community @relation(fields: [communitybbs_community_id], references: [id], onDelete: Cascade)
+  author communitybbs_member @relation(fields: [communitybbs_member_id], references: [id], onDelete: Cascade)
+  
+  communitybbs_comment communitybbs_comment[]
+  communitybbs_vote communitybbs_vote[]
+  communitybbs_search_post communitybbs_search_post?
+  communitybbs_search_comment communitybbs_search_comment[]
+  
+  @@index([communitybbs_community_id, created_at])
+  @@index([communitybbs_community_id, updated_at])
+  @@index([communitybbs_member_id, created_at])
+  @@index([deleted_at])
+}
+
+/// Main entity representing comments on posts. Supports infinite nesting
+/// through parent-child relationships. Each comment belongs to a post and
+/// may optionally belong to another comment as a reply. Implements soft
+/// deletion for moderation.
+///
+/// @namespace Content
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model communitybbs_comment {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Reference to the post this comment belongs to. {@link
+  /// communitybbs_post.id}.
+  communitybbs_post_id String
+  
+  /// Reference to the member who authored this comment. {@link
+  /// communitybbs_member.id}.
+  communitybbs_member_id String
+  
+  /// Reference to the parent comment this is replying to. {@link
+  /// communitybbs_comment.id}. Used for threaded replies. Null for top-level
+  /// comments.
+  communitybbs_comment_id String?
+  
+  /// Text content of the comment. Must be between 2 and 2,000 characters
+  /// according to business requirements. Truncated if longer.
+  content String
+  
+  /// Display name of the author as shown on the comment. If not provided by
+  /// user, defaults to 'Anonymous'. Truncated to 32 characters if longer. Not
+  /// a reference to member profile - stored here for consistency even if
+  /// member changes display name.
+  display_name String?
+  
+  /// Timestamp when the comment was created. Always set at time of creation
+  /// and never modified.
+  created_at DateTime
+  
+  /// Timestamp when the comment was last updated. Set on any edit operation.
+  updated_at DateTime
+  
+  /// Timestamp when the comment was soft-deleted. Null if not deleted.
+  /// Enforces soft-delete policy for content moderation.
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  post communitybbs_post @relation(fields: [communitybbs_post_id], references: [id], onDelete: Cascade)
+  author communitybbs_member @relation(fields: [communitybbs_member_id], references: [id], onDelete: Cascade)
+  parent communitybbs_comment? @relation("recursive", fields: [communitybbs_comment_id], references: [id], onDelete: Cascade)
+  
+  recursive communitybbs_comment[] @relation("recursive")
+  communitybbs_vote communitybbs_vote[]
+  communitybbs_search_comment communitybbs_search_comment?
+  
+  @@index([communitybbs_post_id, created_at])
+  @@index([communitybbs_post_id, updated_at])
+  @@index([communitybbs_member_id, created_at])
+  @@index([communitybbs_comment_id])
+  @@index([deleted_at])
+}

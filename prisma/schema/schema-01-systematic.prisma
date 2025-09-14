@@ -1,0 +1,64 @@
+/// Static lookup table defining business categories for communities. Used by
+/// other domains to classify communities into predefined topics for
+/// discovery and filtering. Not directly managed by regular users but
+/// maintained by system administrators. Each category is an immutable
+/// classification used for community grouping.
+///
+/// @namespace Systematic
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model communitybbs_category {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// The human-readable name of the category. Examples: "Tech & Programming",
+  /// "Science", "Games". Must be unique and from the predefined list.
+  name String
+  
+  /// A brief description explaining the scope of this category. Used in UI to
+  /// provide context to users browsing communities.
+  description String?
+  
+  //----
+  // RELATIONS
+  //----
+  @@unique([name])
+}
+
+/// Global system configuration settings for the Community BBS platform.
+/// Contains key-value pairs that control platform behavior, feature flags,
+/// and default parameters. Managed exclusively by administrators through
+/// system interface. Values are applied system-wide and affect all users.
+/// Example: disallow_new_community_creation, default_sort_order,
+/// search_result_limit.
+///
+/// @namespace Systematic
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model communitybbs_configuration {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Unique configuration key identifier. Used programatically to locate
+  /// settings. Examples: "default_sort_order", "max_community_name_length",
+  /// "enable_search".
+  key String
+  
+  /// The string value of the configuration setting. Can be boolean
+  /// ("true"/"false"), integer ("10"), string ("Newest"), or JSON object
+  /// ("{\"enabled\":true}").
+  value String
+  
+  /// Human-readable description of what this configuration controls and its
+  /// expected values. Used by administrators during management.
+  description String?
+  
+  //----
+  // RELATIONS
+  //----
+  @@unique([key])
+}

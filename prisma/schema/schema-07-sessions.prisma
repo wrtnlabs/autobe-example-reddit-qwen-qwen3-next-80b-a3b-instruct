@@ -1,0 +1,68 @@
+/// Authentication session record tracking user login state, token validity,
+/// and activity. This table is essential for implementing secure login,
+/// session expiry, and seamless re-authentication flows. Each session is
+/// tied to a user actor (member, guest, or administrator) and must be
+/// validated for every protected request. Supports grace period logic and
+/// silent refresh attempts by tracking last activity time, enabling seamless
+/// restoration of context after temporary token invalidation without
+/// requiring full re-login. Associated with auth actors via actor_id.
+///
+/// @namespace Sessions
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model communitybbs_session {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Reference to the user actor (member, guest, or administrator) this
+  /// session belongs to. {@link communitybbs_member.id} or {@link
+  /// communitybbs_guest.id} or {@link communitybbs_administrator.id}.
+  actor_id String
+  
+  /// Unique session token issued upon login. Used for authentication in API
+  /// headers. Must be cryptographically secure and randomly generated.
+  token String
+  
+  /// Timestamp when this session expires. After this time, the session is
+  /// invalid and must be refreshed or re-authenticated. Used to enforce
+  /// session lifetime policies.
+  expires_at DateTime
+  
+  /// Timestamp of the last user interaction within this session (e.g., API
+  /// call, page load). Used to implement grace periods and silent refresh
+  /// logic; sessions are considered "active" if last_activity_at is within 5
+  /// minutes of current time.
+  last_activity_at DateTime
+  
+  /// Timestamp when this session was created and issued.
+  created_at DateTime
+  
+  /// Timestamp when this session was last updated (e.g., when last_activity_at
+  /// was refreshed).
+  updated_at DateTime
+  
+  /// Soft delete timestamp. When a session is revoked or expired but not
+  /// physically deleted, this field is populated. Used for audit trails and
+  /// recovery.
+  deleted_at DateTime?
+  
+  /// Current validity state of the session. True if session is active and not
+  /// expired or revoked; false if expired, revoked, or deleted. Used for quick
+  /// permission checks without parsing timestamps.
+  is_valid Boolean
+  
+  //----
+  // RELATIONS
+  //----
+  actor communitybbs_member @relation(fields: [actor_id], references: [id], onDelete: Cascade)
+  
+  communitybbs_administrator communitybbs_administrator?
+  
+  @@unique([token])
+  @@index([expires_at])
+  @@index([actor_id])
+  @@index([last_activity_at])
+  @@index([is_valid])
+}

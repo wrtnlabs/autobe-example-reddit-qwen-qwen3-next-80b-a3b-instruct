@@ -1,0 +1,141 @@
+/// Search index for posts, enabling full-text search across titles and
+/// bodies. This table is optimized for fast keyword matching and does not
+/// store business data directly but references the original post for
+/// context. Used exclusively for search operations to maintain separation of
+/// concerns and optimize performance.
+///
+/// @namespace Search
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model communitybbs_search_post {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// References the original post in communitybbs_post model. {@link
+  /// communitybbs_post.id}.
+  communitybbs_post_id String
+  
+  /// References the community where the post belongs. {@link
+  /// communitybbs_community.id}.
+  communitybbs_community_id String
+  
+  /// The title of the original post for full-text search indexing. This is a
+  /// denormalized copy for search efficiency.
+  title String
+  
+  /// The body content of the original post for full-text search indexing. This
+  /// is a denormalized copy for search efficiency.
+  body String
+  
+  /// Timestamp of when the post was created. Used for sorting search results
+  /// by recency.
+  created_at DateTime
+  
+  /// Timestamp of when the post was last updated. Used to trigger re-indexing
+  /// in search system.
+  updated_at DateTime
+  
+  /// Popularity score calculated as upvotes minus downvotes from the original
+  /// post. Used for 'Top' sort order in search results.
+  score Int
+  
+  //----
+  // RELATIONS
+  //----
+  post communitybbs_post @relation(fields: [communitybbs_post_id], references: [id], onDelete: Cascade)
+  community communitybbs_community @relation(fields: [communitybbs_community_id], references: [id], onDelete: Cascade)
+  
+  @@unique([communitybbs_post_id])
+  @@index([created_at])
+  @@index([score, created_at, id])
+  @@index([communitybbs_community_id, created_at], map: "communitybbs_search_post_communitybbs_community_id_cre_04950e9b")
+}
+
+/// Search index for communities, enabling full-text search across names and
+/// descriptions. This table is optimized for fast keyword matching and does
+/// not store business data directly but references the original community
+/// for context. Used exclusively for search operations to maintain
+/// separation of concerns and optimize performance.
+///
+/// @namespace Search
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model communitybbs_search_community {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// References the original community in communitybbs_community model. {@link
+  /// communitybbs_community.id}.
+  communitybbs_community_id String
+  
+  /// The name of the community for full-text search indexing. This is a
+  /// denormalized copy for search efficiency.
+  name String
+  
+  /// The description of the community for full-text search indexing. This is a
+  /// denormalized copy for search efficiency.
+  description String
+  
+  /// Timestamp of when the community was created. Used for sorting search
+  /// results by recency.
+  created_at DateTime
+  
+  //----
+  // RELATIONS
+  //----
+  community communitybbs_community @relation(fields: [communitybbs_community_id], references: [id], onDelete: Cascade)
+  
+  @@unique([communitybbs_community_id])
+  @@index([created_at])
+}
+
+/// Search index for comments, enabling full-text search across comment
+/// content. This table is optimized for fast keyword matching and does not
+/// store business data directly but references the original comment for
+/// context. Used exclusively for search operations to maintain separation of
+/// concerns and optimize performance.
+///
+/// @namespace Search
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model communitybbs_search_comment {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// References the original comment in communitybbs_comment model. {@link
+  /// communitybbs_comment.id}.
+  communitybbs_comment_id String
+  
+  /// References the post this comment belongs to. {@link communitybbs_post.id}.
+  communitybbs_post_id String
+  
+  /// References the community this comment belongs to. {@link
+  /// communitybbs_community.id}.
+  communitybbs_community_id String
+  
+  /// The content of the original comment for full-text search indexing. This
+  /// is a denormalized copy for search efficiency.
+  content String
+  
+  /// Timestamp of when the comment was created. Used for sorting search
+  /// results by recency.
+  created_at DateTime
+  
+  //----
+  // RELATIONS
+  //----
+  comment communitybbs_comment @relation(fields: [communitybbs_comment_id], references: [id], onDelete: Cascade)
+  post communitybbs_post @relation(fields: [communitybbs_post_id], references: [id], onDelete: Cascade)
+  community communitybbs_community @relation(fields: [communitybbs_community_id], references: [id], onDelete: Cascade)
+  
+  @@unique([communitybbs_comment_id])
+  @@index([created_at])
+  @@index([communitybbs_post_id, created_at])
+  @@index([communitybbs_community_id, created_at], map: "communitybbs_search_comment_communitybbs_community_id__7f737c9c")
+}

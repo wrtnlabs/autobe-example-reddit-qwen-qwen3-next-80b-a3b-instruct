@@ -1,0 +1,57 @@
+/// Tracks user votes (upvotes/downvotes) on posts and comments. Each vote is
+/// associated with an actor (member/administrator/guest) and exactly one
+/// target (either a post or a comment). This table enables real-time score
+/// calculation, prevents duplicate voting, and supports audit trails. This
+/// table does NOT store aggregated scores - scores are computed from this
+/// data. Used in conjunction with communitybbs_post and communitybbs_comment
+/// tables. Referential integrity ensured via foreign keys to existing
+/// tables: actor_id references communitybbs_member,
+/// communitybbs_administrator, or communitybbs_guest (all use uuid id),
+/// post_id references communitybbs_post.id, comment_id references
+/// communitybbs_comment.id. Application logic enforces that exactly one of
+/// post_id or comment_id must be non-null.
+///
+/// @namespace Voting
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model communitybbs_vote {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// The actor who cast the vote. Links to either a member, administrator, or
+  /// guest via id. {@link communitybbs_member.id} or {@link
+  /// communitybbs_administrator.id} or {@link communitybbs_guest.id}.
+  actor_id String
+  
+  /// The post this vote is associated with, if applicable. One and only one of
+  /// post_id or comment_id must be non-null. {@link communitybbs_post.id}.
+  post_id String?
+  
+  /// The comment this vote is associated with, if applicable. One and only one
+  /// of post_id or comment_id must be non-null. {@link
+  /// communitybbs_comment.id}.
+  comment_id String?
+  
+  /// The type of vote: 'upvote' or 'downvote'.
+  type String
+  
+  /// Timestamp when the vote was cast. Always set on creation and never
+  /// updated.
+  created_at DateTime
+  
+  //----
+  // RELATIONS
+  //----
+  actor communitybbs_member @relation(fields: [actor_id], references: [id], onDelete: Cascade)
+  post communitybbs_post? @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  comment communitybbs_comment? @relation(fields: [comment_id], references: [id], onDelete: Cascade)
+  
+  @@unique([actor_id, post_id])
+  @@unique([actor_id, comment_id])
+  @@index([actor_id])
+  @@index([post_id])
+  @@index([comment_id])
+  @@index([created_at])
+}
