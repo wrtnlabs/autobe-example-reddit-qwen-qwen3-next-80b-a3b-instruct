@@ -31,9 +31,9 @@ import { MemberPayload } from "../decorators/payload/MemberPayload";
  * @param props.member - The authenticated member making the request
  * @param props.postId - The unique identifier of the post to be updated
  * @param props.body - Request body containing updated title and/or body content
+ *   for the post
  * @returns The updated post information after successful update
- * @throws {Error} When the post is not found
- * @throws {Error} When the authenticated member is not the author of the post
+ * @throws {Error} When the post does not exist or the user is not the author
  */
 export async function putmyPostsPostId(props: {
   member: MemberPayload;
@@ -42,37 +42,77 @@ export async function putmyPostsPostId(props: {
 }): Promise<IPost> {
   const { member, postId, body } = props;
 
-  // Fetch the post
+  // Fetch the post and verify ownership
   const post = await MyGlobal.prisma.communitybbs_post.findUniqueOrThrow({
-    where: { id: postId },
-  });
-
-  // Verify ownership
-  if (post.communitybbs_member_id !== member.id) {
-    throw new Error("Unauthorized: You can only update your own posts");
-  }
-
-  // Perform update with direct object literal (no intermediate variables)
-  const updated = await MyGlobal.prisma.communitybbs_post.update({
-    where: { id: postId },
-    data: {
-      ...(body.title !== undefined && { title: body.title }),
-      ...(body.body !== undefined && { body: body.body }),
-      updated_at: toISOStringSafe(new Date()),
+    where: {
+      id: postId,
+      communitybbs_member_id: member.id,
     },
   });
 
-  // Return the updated post with properly formatted date fields
+  // Build update data object
+  const updateData: any = {};
+
+  // Update title if provided and not null/undefined
+  if (body.title !== undefined) {
+    updateData.title = body.title;
+  }
+
+  // Update body if provided and not null/undefined
+  if (body.body !== undefined) {
+    updateData.body = body.body;
+  }
+
+  // Always update updated_at to current time
+  updateData.updated_at = toISOStringSafe(new Date());
+
+  // Perform the update
+  const updated = await MyGlobal.prisma.communitybbs_post.update({
+    where: { id: postId },
+    data: updateData,
+  });
+
+  // Fetch the updated post with all fields to return as IPost
+  const result = await MyGlobal.prisma.communitybbs_post.findUnique({
+    where: { id: postId },
+  });
+
+  if (!result) {
+    throw new Error("Post not found after update");
+  }
+
+  // Count comments for comment_count field
+  const commentCount = await MyGlobal.prisma.communitybbs_comment.count({
+    where: {
+      communitybbs_post_id: postId,
+      deleted_at: null,
+    },
+  });
+
+  // Count votes for score field
+  const votes = await MyGlobal.prisma.communitybbs_vote.findMany({
+    where: {
+      post_id: postId,
+    },
+  });
+
+  const score =
+    votes.filter((v) => v.type === "upvote").length -
+    votes.filter((v) => v.type === "downvote").length;
+
+  // Return the formatted IPost object with all field types correct
   return {
-    id: updated.id,
-    communityId: updated.communitybbs_community_id,
-    author: updated.display_name || "Anonymous",
-    title: updated.title,
-    body: updated.body,
-    created_at: toISOStringSafe(updated.created_at),
-    updated_at: updated.updated_at
-      ? toISOStringSafe(updated.updated_at)
+    id: result.id,
+    communityId: result.communitybbs_community_id,
+    author: result.display_name || "Anonymous",
+    title: result.title,
+    body: result.body,
+    created_at: toISOStringSafe(result.created_at),
+    updated_at: result.updated_at
+      ? toISOStringSafe(result.updated_at)
       : undefined,
-    deleted_at: updated.deleted_at ? toISOStringSafe(updated.deleted_at) : null,
+    deleted_at: result.deleted_at ? toISOStringSafe(result.deleted_at) : null,
+    score: score,
+    comment_count: commentCount,
   };
 }

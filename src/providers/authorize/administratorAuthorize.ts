@@ -15,12 +15,12 @@ export async function administratorAuthorize(request: {
     throw new ForbiddenException(`You're not ${payload.type}`);
   }
 
-  // administrator table is standalone (no foreign key to member table) - query by id directly
-  // Check for soft delete and ensure active status
+  // payload.id contains top-level user table ID
+  // Query using appropriate field based on schema structure
   const administrator = await MyGlobal.prisma.communitybbs_administrator.findFirst({
     where: {
       id: payload.id
-    }
+    },
   });
 
   if (administrator === null) {

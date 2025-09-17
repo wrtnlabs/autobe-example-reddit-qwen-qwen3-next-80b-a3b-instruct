@@ -14,27 +14,48 @@ export async function postauthMemberLogin(props: {
 }): Promise<ICommunitybbsMember.IAuthorized> {
   const { email, password } = props;
 
+  // Find the member by email
   const member = await MyGlobal.prisma.communitybbs_member.findUniqueOrThrow({
     where: { email },
   });
 
+  // Verify password
   const isValid = await MyGlobal.password.verify(
     password,
     member.password_hash,
   );
-
   if (!isValid) {
     throw new Error("Login failed. Please try again.");
   }
 
-  const now = new Date();
-  const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
-  const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  // Generate session token
+  const sessionId = v4() as string & tags.Format<"uuid">;
+  const now = toISOStringSafe(new Date());
+  const expiresAt = toISOStringSafe(new Date(Date.now() + 60 * 60 * 1000)); // 1 hour
+  const refreshUntil = toISOStringSafe(
+    new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+  ); // 7 days
 
+  // Create session record
+  await MyGlobal.prisma.communitybbs_session.create({
+    data: {
+      id: sessionId,
+      actor_id: member.id,
+      token: sessionId, // Using session ID as token for simplicity
+      expires_at: expiresAt,
+      last_activity_at: now,
+      created_at: now,
+      updated_at: now,
+      is_valid: true,
+    },
+  });
+
+  // Generate JWT tokens
   const accessToken = jwt.sign(
     {
       userId: member.id,
       email: member.email,
+      type: "member",
     },
     MyGlobal.env.JWT_SECRET_KEY,
     {
@@ -55,28 +76,14 @@ export async function postauthMemberLogin(props: {
     },
   );
 
-  const sessionId = v4() as string & tags.Format<"uuid">;
-
-  await MyGlobal.prisma.communitybbs_session.create({
-    data: {
-      id: sessionId,
-      actor_id: member.id,
-      token: accessToken,
-      expires_at: toISOStringSafe(oneHourFromNow),
-      last_activity_at: toISOStringSafe(now),
-      created_at: toISOStringSafe(now),
-      updated_at: toISOStringSafe(now),
-      is_valid: true,
-    },
-  });
-
+  // Return the authorized response
   return {
     id: member.id,
     token: {
       access: accessToken,
       refresh: refreshToken,
-      expired_at: toISOStringSafe(oneHourFromNow),
-      refreshable_until: toISOStringSafe(sevenDaysFromNow),
+      expired_at: expiresAt,
+      refreshable_until: refreshUntil,
     },
   };
 }

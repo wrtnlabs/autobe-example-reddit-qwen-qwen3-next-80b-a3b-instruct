@@ -16,14 +16,15 @@ import { AdministratorPayload } from "../decorators/payload/AdministratorPayload
  * or recovery purposes.
  *
  * This endpoint retrieves a specific community by its name identifier for
- * administrative review. The system looks up the community in the
- * communitybbs_community table using the name parameter (case-insensitive
- * lookup). If the community exists, the full record is returned including id,
- * description, category, logo, banner, rules, created_at, updated_at,
- * deleted_at, member_count, and last_active_at. This endpoint returns
- * soft-deleted records (where deleted_at is not null) unlike the public API,
- * enabling administrators to view and potentially restore archived
- * communities.
+ * administrative review.
+ *
+ * The system looks up the community in the communitybbs_community table using
+ * the name parameter (case-insensitive lookup). If the community exists, the
+ * full record is returned including id, description, category, logo, banner,
+ * rules, created_at, updated_at, deleted_at, member_count, and last_active_at.
+ * This endpoint returns soft-deleted records (where deleted_at is not null)
+ * unlike the public API, enabling administrators to view and potentially
+ * restore archived communities.
  *
  * The response includes all fields as stored in the schema, including the rules
  * array as a JSON string and the image URLs. No filtering is applied based on
@@ -40,9 +41,9 @@ import { AdministratorPayload } from "../decorators/payload/AdministratorPayload
  * @param props.administrator - The authenticated administrator making the
  *   request
  * @param props.name - The unique name identifier of the community (e.g., 'ai',
- *   'retro-gaming'). Case-insensitive, must match exactly
+ *   'retro-gaming'). Case-insensitive, must match exactly.
  * @returns The complete community object including hidden or deleted fields
- * @throws {Error} When community with specified name does not exist
+ * @throws {Error} When community with given name is not found
  */
 export async function getadminCommunitiesName(props: {
   administrator: AdministratorPayload;
@@ -50,51 +51,34 @@ export async function getadminCommunitiesName(props: {
 }): Promise<ICommunitybbsCommunity> {
   const { name } = props;
 
-  const community =
-    await MyGlobal.prisma.communitybbs_community.findFirstOrThrow({
-      where: { name },
-    });
+  // Query company with exact name match - Prisma uses case-sensitive exact match by default
+  // Schema has unique index on name, so only one result possible
+  const community = await MyGlobal.prisma.communitybbs_community.findFirst({
+    where: {
+      name,
+    },
+  });
 
+  // If community not found, throw error as per E2E test
+  if (!community) {
+    throw new Error("Community not found");
+  }
+
+  // Convert all DateTime fields to ISO strings using toISOStringSafe
   return {
-    id: community.id as string & tags.Format<"uuid">,
-    name: community.name as string &
-      tags.MinLength<3> &
-      tags.MaxLength<32> &
-      tags.Pattern<"^[a-z0-9_-]+$">,
-    description: community.description as
-      | (string & tags.MaxLength<500>)
-      | undefined,
-    category: community.category as
-      | "Tech & Programming"
-      | "Science"
-      | "Movies & TV"
-      | "Games"
-      | "Sports"
-      | "Lifestyle & Wellness"
-      | "Study & Education"
-      | "Art & Design"
-      | "Business & Finance"
-      | "News & Current Affairs"
-      | "General",
-    logo: community.logo as
-      | (string & tags.MaxLength<80000> & tags.Format<"uri">)
-      | undefined,
-    banner: community.banner as
-      | (string & tags.MaxLength<80000> & tags.Format<"uri">)
-      | undefined,
-    rules: community.rules as (string & tags.MaxLength<3000>) | undefined,
-    created_at: toISOStringSafe(community.created_at) as string &
-      tags.Format<"date-time">,
-    updated_at: toISOStringSafe(community.updated_at) as string &
-      tags.Format<"date-time">,
+    id: community.id,
+    name: community.name,
+    description: community.description,
+    category: community.category,
+    logo: community.logo,
+    banner: community.banner,
+    rules: community.rules,
+    created_at: toISOStringSafe(community.created_at),
+    updated_at: toISOStringSafe(community.updated_at),
     deleted_at: community.deleted_at
-      ? (toISOStringSafe(community.deleted_at) as string &
-          tags.Format<"date-time">)
+      ? toISOStringSafe(community.deleted_at)
       : undefined,
-    member_count: community.member_count as number &
-      tags.Type<"int32"> &
-      tags.Minimum<0>,
-    last_active_at: toISOStringSafe(community.last_active_at) as string &
-      tags.Format<"date-time">,
+    member_count: community.member_count,
+    last_active_at: toISOStringSafe(community.last_active_at),
   };
 }

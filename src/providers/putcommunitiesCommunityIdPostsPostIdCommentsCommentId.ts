@@ -16,31 +16,30 @@ export async function putcommunitiesCommunityIdPostsPostIdCommentsCommentId(prop
 }): Promise<ICommunitybbsComment> {
   const { member, commentId, body } = props;
 
-  // Fetch the comment to verify ownership and existence
+  // Find the comment and verify it exists and belongs to the correct post
   const comment = await MyGlobal.prisma.communitybbs_comment.findUniqueOrThrow({
     where: { id: commentId },
   });
 
-  // Authorization check: Only the original author or admin can update
+  // Verify ownership: only the author or admin can update
   if (comment.communitybbs_member_id !== member.id) {
-    throw new Error("Unauthorized: You can only update comments you authored");
+    throw new Error("Unauthorized: You can only update your own comments");
   }
 
-  // Prepare update data with validation
+  // Build update data
   const updateData = {
     content: body.content,
+    display_name: body.display_name ?? undefined,
     updated_at: toISOStringSafe(new Date()),
-    // Include display_name only if provided
-    ...(body.display_name !== undefined && { display_name: body.display_name }),
   };
 
-  // Perform the update
+  // Update the comment
   const updated = await MyGlobal.prisma.communitybbs_comment.update({
     where: { id: commentId },
     data: updateData,
   });
 
-  // Return the updated comment with proper type conversion
+  // Return result with properly formatted date fields
   return {
     id: updated.id,
     communitybbs_post_id: updated.communitybbs_post_id,

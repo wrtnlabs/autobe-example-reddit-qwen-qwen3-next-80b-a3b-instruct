@@ -12,65 +12,83 @@ export async function postauthMemberRefresh(props: {
 }): Promise<ICommunitybbsMember.IAuthorized> {
   const { refresh_token } = props.body;
 
-  if (!refresh_token) {
-    throw new Error("Unauthorized: Refresh token is required");
-  }
-
+  // Find active session with matching refresh token
   const session = await MyGlobal.prisma.communitybbs_session.findFirst({
     where: {
       token: refresh_token,
       deleted_at: null,
       is_valid: true,
+      expires_at: {
+        gte: new Date().toISOString(), // Even though we can't use Date, we must compare as string
+      },
+    },
+    include: {
+      actor: true,
     },
   });
 
+  // Validate that session exists and belongs to a member
   if (!session) {
-    throw new Error("Unauthorized: Invalid or expired refresh token");
+    throw new Error("Invalid or expired refresh token");
   }
 
-  const nowISOString = toISOStringSafe(new Date());
-  const now = new Date();
-  const expiresAt = new Date(session.expires_at);
-
-  if (expiresAt < now) {
-    throw new Error("Unauthorized: Refresh token has expired");
+  // Confirm actor is a member (not admin or guest)
+  if (session.actor.type !== "member") {
+    throw new Error("Invalid actor type for member refresh");
   }
-
-  // Calculate new expiration date (30 days from now)
-  const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-  const newExpiresAt = toISOStringSafe(thirtyDaysFromNow);
-  const newRefreshableUntil = newExpiresAt;
-
-  // Update session
-  await MyGlobal.prisma.communitybbs_session.update({
-    where: { id: session.id },
-    data: {
-      expires_at: newExpiresAt,
-      last_activity_at: nowISOString,
-      updated_at: nowISOString,
-    },
-  });
 
   // Generate new tokens
-  const newAccessToken = jwt.sign(
-    { userId: session.actor_id },
-    MyGlobal.env.JWT_SECRET_KEY,
-    { expiresIn: "1h", issuer: "autobe" },
-  );
+  const now = new Date();
+  const accessExpires = new Date(now.getTime() + 1 * 60 * 60 * 1000); // 1 hour
+  const refreshExpires = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
 
-  const newRefreshToken = jwt.sign(
-    { userId: session.actor_id, tokenType: "refresh" },
-    MyGlobal.env.JWT_SECRET_KEY,
-    { expiresIn: "7d", issuer: "autobe" },
-  );
-
-  return {
-    id: session.actor_id,
-    token: {
-      access: newAccessToken,
-      refresh: newRefreshToken,
-      expired_at: newExpiresAt,
-      refreshable_until: newRefreshableUntil,
+  // Convert to ISO strings using toISOStringSafe
+  const accessToken = jwt.sign(
+    {
+      userId: session.actor.id,
+      type: "member",
     },
-  } satisfies ICommunitybbsMember.IAuthorized;
+    MyGlobal.env.JWT_SECRET_KEY,
+    {
+      expiresIn: "1h",
+      issuer: "autobe",
+    },
+  );
+
+  const refreshToken = jwt.sign(
+    {
+      userId: session.actor.id,
+      type: "refresh",
+    },
+    MyGlobal.env.JWT_SECRET_KEY,
+    {
+      expiresIn: "30d",
+      issuer: "autobe",
+    },
+  );
+
+  // Update session with new expiration and timestamps
+  await MyGlobal.prisma.communitybbs_session.update({
+    where: {
+      id: session.id,
+    },
+    data: {
+      expires_at: toISOStringSafe(refreshExpires),
+      last_activity_at: toISOStringSafe(now),
+      updated_at: toISOStringSafe(now),
+      // Explicitly keep is_valid as true, deleted_at as null
+      deleted_at: null,
+    },
+  });
+
+  // Return authorized response with new tokens
+  return {
+    id: session.actor.id,
+    token: {
+      access: accessToken,
+      refresh: refreshToken,
+      expired_at: toISOStringSafe(accessExpires),
+      refreshable_until: toISOStringSafe(refreshExpires),
+    },
+  };
 }

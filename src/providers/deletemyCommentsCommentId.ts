@@ -7,12 +7,7 @@ import { toISOStringSafe } from "../util/toISOStringSafe";
 import { MemberPayload } from "../decorators/payload/MemberPayload";
 
 /**
- * Delete a user’s own comment. This operation permanently removes a comment
- * authored by the authenticated member. Uses the communitybbs_comment table
- * where it updates the deleted_at field to mark the comment as deleted (soft
- * delete). The presence of the deleted_at column in the Prisma schema confirms
- * soft delete capability. Only the comment’s author (matching
- * communitybbs_member_id to the authenticated member) can perform deletion.
+ * Delete a user's own comment (soft delete).
  *
  * This operation allows a member to delete a comment they authored. Upon
  * execution, it performs a soft delete by updating the deleted_at field in the
@@ -30,13 +25,10 @@ import { MemberPayload } from "../decorators/payload/MemberPayload";
  *
  * @param props - Request properties
  * @param props.member - The authenticated member performing the deletion
- * @param props.commentId - The unique identifier of the comment to be deleted.
- *   Must match an existing communitybbs_comment.id and the comment must have
- *   been authored by the authenticated member.
+ * @param props.commentId - The unique identifier of the comment to be deleted
  * @returns Void
  * @throws {Error} When the comment does not exist
- * @throws {Error} When the authenticated member is not the author of the
- *   comment
+ * @throws {Error} When the comment does not belong to the authenticated member
  */
 export async function deletemyCommentsCommentId(props: {
   member: MemberPayload;
@@ -44,18 +36,17 @@ export async function deletemyCommentsCommentId(props: {
 }): Promise<void> {
   const { member, commentId } = props;
 
-  const comment = await MyGlobal.prisma.communitybbs_comment.findUnique({
+  // Get the comment, ensuring it exists and retrieving the author_id
+  const comment = await MyGlobal.prisma.communitybbs_comment.findUniqueOrThrow({
     where: { id: commentId },
   });
 
-  if (!comment) {
-    throw new Error("Comment not found");
-  }
-
+  // Verify that the comment belongs to the authenticated member
   if (comment.communitybbs_member_id !== member.id) {
     throw new Error("Unauthorized: You can only delete your own comments");
   }
 
+  // Perform soft delete by setting deleted_at to current timestamp
   await MyGlobal.prisma.communitybbs_comment.update({
     where: { id: commentId },
     data: {

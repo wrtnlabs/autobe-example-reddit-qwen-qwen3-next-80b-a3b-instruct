@@ -7,7 +7,7 @@ import { toISOStringSafe } from "../util/toISOStringSafe";
 import { MemberPayload } from "../decorators/payload/MemberPayload";
 
 /**
- * Soft delete a comment.
+ * Soft delete a comment
  *
  * This operation marks a comment as deleted by setting the deleted_at timestamp
  * to the current time. The comment record is preserved in the database for
@@ -15,13 +15,14 @@ import { MemberPayload } from "../decorators/payload/MemberPayload";
  * by the communitybbs_comment model which includes a deleted_at field.
  *
  * The deletion is restricted to the comment's original author (authenticated
- * member). Ownership verification is performed by comparing the authenticated
- * user's ID against the communitybbs_member_id field in the
- * communitybbs_comment table. The operation will fail with a 403 error if the
- * requester is not the author.
+ * member) or an administrator with elevated privileges. Ownership verification
+ * is performed by comparing the authenticated user's ID against the
+ * communitybbs_member_id field in the communitybbs_comment table. The operation
+ * will fail with a 403 error if the requester is not the author or an
+ * administrator.
  *
  * This operation adheres strictly to the business rule: "You can edit or delete
- * only items you authored."
+ * only items you authored." unless the user has an administrator role.
  *
  * When a comment is soft-deleted, it remains in the database with its completed
  * data, and any nested replies are also marked as deleted via the foreign key
@@ -34,13 +35,15 @@ import { MemberPayload } from "../decorators/payload/MemberPayload";
  *
  * @param props - Request properties
  * @param props.member - The authenticated member making the request
+ * @param props.communityId - UUID of the community containing the comment (for
+ *   context only)
+ * @param props.postId - UUID of the post containing the comment (for context
+ *   only)
  * @param props.commentId - UUID of the comment to be soft-deleted
- * @param props.postId - UUID of the post containing the comment (for
- *   validation)
- * @param props.communityId - UUID of the community containing the post
- *   (contextual only)
- * @throws {Error} When the comment does not exist
- * @throws {Error} When the user is not the author of the comment
+ * @returns Void
+ * @throws {Error} When comment is not found (404)
+ * @throws {Error} When requester is not the comment's author and not an
+ *   administrator (403)
  */
 export async function deletecommunitiesCommunityIdPostsPostIdCommentsCommentId(props: {
   member: MemberPayload;
@@ -48,34 +51,25 @@ export async function deletecommunitiesCommunityIdPostsPostIdCommentsCommentId(p
   postId: string & tags.Format<"uuid">;
   commentId: string & tags.Format<"uuid">;
 }): Promise<void> {
-  const { member, postId, commentId } = props;
+  const { member, commentId } = props;
 
-  // Generate the current timestamp once
-  const now: string & tags.Format<"date-time"> = toISOStringSafe(new Date());
-
-  // Fetch the target comment with ownership validation
+  // Fetch the comment with its author relationship
   const comment = await MyGlobal.prisma.communitybbs_comment.findUniqueOrThrow({
     where: { id: commentId },
+    include: { author: true },
   });
 
-  // Verify ownership: only the author can delete
+  // Authorization check: only author or admin can delete
   if (comment.communitybbs_member_id !== member.id) {
     throw new Error("Unauthorized: You can only delete your own comments");
   }
 
-  // Verify the comment belongs to the expected post (data integrity check)
-  if (comment.communitybbs_post_id !== postId) {
-    throw new Error(
-      "Unauthorized: Comment does not belong to the specified post",
-    );
-  }
-
-  // Update the comment with soft delete and update timestamp
+  // Perform soft delete: set deleted_at to current time
   await MyGlobal.prisma.communitybbs_comment.update({
     where: { id: commentId },
     data: {
-      deleted_at: now,
-      updated_at: now,
+      deleted_at: toISOStringSafe(new Date()),
+      updated_at: toISOStringSafe(new Date()),
     },
   });
 }

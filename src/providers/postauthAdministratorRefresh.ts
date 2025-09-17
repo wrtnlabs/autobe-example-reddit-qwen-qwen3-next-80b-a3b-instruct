@@ -7,46 +7,55 @@ import { toISOStringSafe } from "../util/toISOStringSafe";
 import { ICommunitybbsAdministrator } from "@ORGANIZATION/PROJECT-api/lib/structures/ICommunitybbsAdministrator";
 import { AdministratorPayload } from "../decorators/payload/AdministratorPayload";
 
+/**
+ * Refreshes the administrator's active session token.
+ *
+ * This endpoint extends the validity of an existing session using a valid
+ * refresh token. Each refresh updates the expires_at and last_activity_at
+ * fields in the communitybbs_session table, giving the administrator
+ * uninterrupted access without requiring a full re-login.
+ *
+ * @param props - Request properties
+ * @param props.administrator - The authenticated administrator making the
+ *   request
+ * @returns The updated authorization token
+ * @throws {Error} When the administrator account is not found
+ * @throws {Error} When the session is not found, expired, revoked, or deleted
+ */
 export async function postauthAdministratorRefresh(props: {
-  administrator: AdministratorPayload;
+  administrator: {
+    id: string & tags.Format<"uuid">;
+    type: "administrator";
+  };
 }): Promise<ICommunitybbsAdministrator.IAuthorized> {
   const { administrator } = props;
 
-  // Find the active session for this administrator
-  const session = await MyGlobal.prisma.communitybbs_session.findFirst({
-    where: {
-      actor_id: administrator.id,
-      is_valid: true,
-      deleted_at: null,
-      expires_at: { gt: toISOStringSafe(new Date()) },
-    },
+  // Find the administrator by ID (using only id, since deleted_at is excluded from WhereInput)
+  const administratorRecord =
+    await MyGlobal.prisma.communitybbs_administrator.findUniqueOrThrow({
+      where: { id: administrator.id },
+    });
+
+  // Find the associated active session using the session_id from administrator
+  const session = await MyGlobal.prisma.communitybbs_session.findUniqueOrThrow({
+    where: { id: administratorRecord.session_id },
   });
 
-  if (!session) {
-    throw new Error("Invalid or expired session");
+  // Validate session is still valid
+  if (session.deleted_at !== null || !session.is_valid) {
+    throw new Error("Session invalid or revoked");
   }
 
-  // Calculate new expiration (30 days from now)
-  const newExpiresAt: string & tags.Format<"date-time"> = toISOStringSafe(
-    new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-  );
-  const newLastActivityAt: string & tags.Format<"date-time"> = toISOStringSafe(
-    new Date(),
-  );
+  // Validate session not expired
+  const now = new Date();
+  if (session.expires_at < now) {
+    throw new Error("Session expired");
+  }
 
-  // Update session to extend validity
-  await MyGlobal.prisma.communitybbs_session.update({
-    where: { id: session.id },
-    data: {
-      expires_at: newExpiresAt,
-      last_activity_at: newLastActivityAt,
-    },
-  });
-
-  // Create new access token with same payload
-  const newAccessToken = jwt.sign(
+  // Generate new tokens
+  const newAccessJwt = jwt.sign(
     {
-      userId: administrator.id,
+      id: administratorRecord.id,
       type: "administrator",
     },
     MyGlobal.env.JWT_SECRET_KEY,
@@ -56,27 +65,40 @@ export async function postauthAdministratorRefresh(props: {
     },
   );
 
-  // Create new refresh token
-  const newRefreshToken = jwt.sign(
+  const newRefreshJwt = jwt.sign(
     {
-      userId: administrator.id,
+      id: administratorRecord.id,
       type: "refresh",
     },
     MyGlobal.env.JWT_SECRET_KEY,
     {
-      expiresIn: "30d",
+      expiresIn: "7d",
       issuer: "autobe",
     },
   );
 
-  // Return authorized response matching ICommunitybbsAdministrator.IAuthorized
+  // Update session with new timestamps
+  const updatedSession = await MyGlobal.prisma.communitybbs_session.update({
+    where: { id: session.id },
+    data: {
+      expires_at: toISOStringSafe(
+        new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      ), // 7 days
+      last_activity_at: toISOStringSafe(now),
+      updated_at: toISOStringSafe(now),
+    },
+  });
+
+  // Return structure matching IAuthorized
   return {
-    id: administrator.id,
+    id: administratorRecord.id,
     token: {
-      access: newAccessToken,
-      refresh: newRefreshToken,
-      expired_at: newExpiresAt,
-      refreshable_until: newExpiresAt,
+      access: newAccessJwt,
+      refresh: newRefreshJwt,
+      expired_at: toISOStringSafe(new Date(Date.now() + 60 * 60 * 1000)), // 1h
+      refreshable_until: toISOStringSafe(
+        new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      ), // 7d
     },
   };
 }

@@ -12,30 +12,21 @@ export async function getcommunitybbsCommunitiesCommunityId(props: {
   const community =
     await MyGlobal.prisma.communitybbs_community.findUniqueOrThrow({
       where: { id: props.communityId },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        category: true,
-        logo: true,
-        banner: true,
-        rules: true,
-        created_at: true,
-        updated_at: true,
-        deleted_at: true,
-        member_count: true,
-        last_active_at: true,
-      },
     });
+
+  // Check if community is deleted
+  if (community.deleted_at !== null) {
+    throw new Error("Community not found");
+  }
 
   return {
     id: community.id,
     name: community.name,
-    description: community.description ?? undefined,
+    description: community.description,
     category: community.category,
-    logo: community.logo ?? undefined,
-    banner: community.banner ?? undefined,
-    rules: community.rules ?? undefined,
+    logo: community.logo,
+    banner: community.banner,
+    rules: community.rules,
     created_at: toISOStringSafe(community.created_at),
     updated_at: toISOStringSafe(community.updated_at),
     deleted_at: community.deleted_at

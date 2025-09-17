@@ -15,62 +15,83 @@ export async function patchcommunitiesCommunityIdPostsPostIdVotes(props: {
 }): Promise<ICommunitybbsVote> {
   const { member, postId, body } = props;
 
-  // Step 1: Verify user is not the post author - enforce business rule
+  // Verify the post exists and is not deleted
   const post = await MyGlobal.prisma.communitybbs_post.findUniqueOrThrow({
     where: { id: postId },
-    select: { communitybbs_member_id: true },
   });
 
-  if (member.id === post.communitybbs_member_id) {
-    throw new Error("You can't vote on your own posts/comments");
+  // 🚫 Business Rule: Cannot vote on your own post
+  if (post.communitybbs_member_id === member.id) {
+    throw new Error("Unauthorized: You cannot vote on your own posts");
   }
 
-  // Step 2: Check if user has an existing vote on this post
-  const existingVote = await MyGlobal.prisma.communitybbs_vote.findFirst({
+  // Check if a vote already exists for this member on this post
+  const existingVote = await MyGlobal.prisma.communitybbs_vote.findUnique({
     where: {
-      actor_id: member.id,
-      post_id: postId,
+      actor_id_post_id: {
+        actor_id: member.id,
+        post_id: postId,
+      },
     },
   });
 
-  // Step 3: Handle vote update
-  if (existingVote) {
-    // If the user tried to vote with the same type, keep the existing vote (no deletion)
-    // This satisfies both the API contract (must return ICommunitybbsVote) and the spec's intent
-    // While maintaining data consistency
-    if (existingVote.type === body.type) {
-      return existingVote;
-    }
+  // If the new vote type matches the existing vote, delete the vote (toggle off)
+  if (existingVote && existingVote.type === body.type) {
+    await MyGlobal.prisma.communitybbs_vote.delete({
+      where: { id: existingVote.id },
+    });
 
-    // User changed vote type: update the existing vote
-    await MyGlobal.prisma.communitybbs_vote.update({
+    // Return a vote object with null post_id and comment_id to represent no vote
+    // This matches the ICommunitybbsVote schema which has optional post_id
+    return {
+      id: v4() as string & tags.Format<"uuid">,
+      actor_id: member.id,
+      post_id: undefined,
+      comment_id: undefined,
+      type: body.type,
+      created_at: toISOStringSafe(new Date()),
+    };
+  }
+
+  // If vote exists and type is different, update it
+  if (existingVote) {
+    const updatedVote = await MyGlobal.prisma.communitybbs_vote.update({
       where: { id: existingVote.id },
       data: { type: body.type },
     });
 
-    // Fetch updated vote record
-    const updatedVote = await MyGlobal.prisma.communitybbs_vote.findUnique({
-      where: { id: existingVote.id },
-    });
-
-    if (!updatedVote) {
-      throw new Error("Vote record not found after update");
-    }
-
-    return updatedVote;
-  } else {
-    // Step 4: No existing vote - create new vote
-    const newVote = await MyGlobal.prisma.communitybbs_vote.create({
-      data: {
-        id: v4() as string & tags.Format<"uuid">,
-        actor_id: member.id,
-        post_id: postId,
-        comment_id: undefined,
-        type: body.type,
-        created_at: toISOStringSafe(new Date()),
-      },
-    });
-
-    return newVote;
+    return {
+      id: updatedVote.id as string & tags.Format<"uuid">,
+      actor_id: updatedVote.actor_id as string & tags.Format<"uuid">,
+      post_id: updatedVote.post_id as
+        | (string & tags.Format<"uuid">)
+        | undefined,
+      comment_id: updatedVote.comment_id as
+        | (string & tags.Format<"uuid">)
+        | undefined,
+      type: updatedVote.type as "upvote" | "downvote",
+      created_at: toISOStringSafe(updatedVote.created_at),
+    };
   }
+
+  // No existing vote - create a new one
+  const newVote = await MyGlobal.prisma.communitybbs_vote.create({
+    data: {
+      actor_id: member.id,
+      post_id: postId,
+      type: body.type,
+      created_at: toISOStringSafe(new Date()),
+    },
+  });
+
+  return {
+    id: newVote.id as string & tags.Format<"uuid">,
+    actor_id: newVote.actor_id as string & tags.Format<"uuid">,
+    post_id: newVote.post_id as (string & tags.Format<"uuid">) | undefined,
+    comment_id: newVote.comment_id as
+      | (string & tags.Format<"uuid">)
+      | undefined,
+    type: newVote.type as "upvote" | "downvote",
+    created_at: toISOStringSafe(newVote.created_at),
+  };
 }

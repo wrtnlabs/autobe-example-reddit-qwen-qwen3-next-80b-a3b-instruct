@@ -11,35 +11,26 @@ export async function getcommunitybbsMemberCommunitiesCommunityIdPostsPostIdComm
   postId: string & tags.Format<"uuid">;
   commentId: string & tags.Format<"uuid">;
 }): Promise<ICommunitybbsComment> {
-  const { communityId, postId, commentId } = props;
+  const { postId, commentId } = props;
 
-  // Fetch the comment with its relationships
-  const comment = await MyGlobal.prisma.communitybbs_comment.findUnique({
+  const comment = await MyGlobal.prisma.communitybbs_comment.findUniqueOrThrow({
     where: {
       id: commentId,
       communitybbs_post_id: postId,
     },
-    include: {
-      post: {
-        select: {
-          communitybbs_community_id: true,
-        },
-      },
+    select: {
+      id: true,
+      communitybbs_post_id: true,
+      communitybbs_member_id: true,
+      communitybbs_comment_id: true,
+      content: true,
+      display_name: true,
+      created_at: true,
+      updated_at: true,
+      deleted_at: true,
     },
   });
 
-  // Validate that the comment belongs to the specified community
-  if (!comment) {
-    throw new Error(
-      "Comment not found or does not belong to the specified post",
-    );
-  }
-
-  if (comment.post.communitybbs_community_id !== communityId) {
-    throw new Error("Comment does not belong to the specified community");
-  }
-
-  // Return the comment with all required fields, ensuring date fields are properly formatted
   return {
     id: comment.id,
     communitybbs_post_id: comment.communitybbs_post_id,

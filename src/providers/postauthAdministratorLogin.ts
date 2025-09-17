@@ -14,47 +14,33 @@ export async function postauthAdministratorLogin(props: {
 }): Promise<ICommunitybbsAdministrator.IAuthorized> {
   const { email, password } = props;
 
-  // Fetch the administrator by email
-  const administrator =
-    await MyGlobal.prisma.communitybbs_administrator.findFirst({
-      where: { email },
-    });
+  // Find administrator by email
+  const admin = await MyGlobal.prisma.communitybbs_administrator.findFirst({
+    where: {
+      email,
+    },
+  });
 
-  if (!administrator) {
+  // Validate administrator exists
+  if (!admin) {
     throw new Error("Invalid credentials");
   }
 
   // Verify password
-  const isValid = await MyGlobal.password.verify(
-    password,
-    administrator.password_hash,
-  );
-
+  const isValid = await MyGlobal.password.verify(password, admin.password_hash);
   if (!isValid) {
     throw new Error("Invalid credentials");
   }
 
-  // Generate new session token
-  const sessionToken = v4() as string & tags.Format<"uuid">;
+  // Generate session token with expiration
+  const now = new Date();
+  const accessExpires = new Date(now.getTime() + 3600000); // 1 hour
+  const refreshExpires = new Date(now.getTime() + 604800000); // 7 days
 
-  // Create new session
-  await MyGlobal.prisma.communitybbs_session.create({
-    data: {
-      actor_id: administrator.id,
-      token: sessionToken,
-      expires_at: toISOStringSafe(new Date(Date.now() + 3600000)), // 1 hour
-      last_activity_at: toISOStringSafe(new Date()),
-      created_at: toISOStringSafe(new Date()),
-      updated_at: toISOStringSafe(new Date()),
-      is_valid: true,
-    },
-  });
-
-  // Generate JWT access token
-  const accessToken = jwt.sign(
+  const access = jwt.sign(
     {
-      userId: administrator.id,
-      type: "administrator",
+      id: admin.id,
+      type: "administrator" as const,
     },
     MyGlobal.env.JWT_SECRET_KEY,
     {
@@ -63,10 +49,9 @@ export async function postauthAdministratorLogin(props: {
     },
   );
 
-  // Generate JWT refresh token
-  const refreshToken = jwt.sign(
+  const refresh = jwt.sign(
     {
-      userId: administrator.id,
+      id: admin.id,
       tokenType: "refresh",
     },
     MyGlobal.env.JWT_SECRET_KEY,
@@ -76,14 +61,26 @@ export async function postauthAdministratorLogin(props: {
     },
   );
 
-  // Return the authorized response
+  // Create session record
+  await MyGlobal.prisma.communitybbs_session.create({
+    data: {
+      actor_id: admin.id,
+      token: access,
+      expires_at: toISOStringSafe(accessExpires),
+      last_activity_at: toISOStringSafe(now),
+      created_at: toISOStringSafe(now),
+      updated_at: toISOStringSafe(now),
+      is_valid: true,
+    },
+  });
+
   return {
-    id: administrator.id,
+    id: admin.id,
     token: {
-      access: accessToken,
-      refresh: refreshToken,
-      expired_at: toISOStringSafe(new Date(Date.now() + 3600000)),
-      refreshable_until: toISOStringSafe(new Date(Date.now() + 604800000)), // 7 days
+      access,
+      refresh,
+      expired_at: toISOStringSafe(accessExpires),
+      refreshable_until: toISOStringSafe(refreshExpires),
     },
   };
 }

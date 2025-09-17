@@ -8,25 +8,24 @@ import { IComment } from "@ORGANIZATION/PROJECT-api/lib/structures/IComment";
 import { MemberPayload } from "../decorators/payload/MemberPayload";
 
 /**
- * Update the content of a user's own comment.
+ * Update a user’s own comment.
  *
  * This operation allows a member to edit the content of a comment they
  * authored. The system verifies that the authenticated member's id matches the
- * communitybbs_member_id in the specified comment record, then updates the
- * content field with the new value. The updated_at timestamp is set to the
- * current time.
+ * communitybbs_member_id in the specified comment record. It then updates the
+ * content field with the new value and sets the updated_at timestamp to the
+ * current time. Only the comment's author is permitted to modify it.
  *
- * Authorization Rule: Only the original author of the comment can update it.
+ * This follows the schema: communitybbs_comment has fields: id,
+ * communitybbs_member_id, content, updated_at.
  *
  * @param props - Request properties
  * @param props.member - The authenticated member making the request
- * @param props.commentId - The unique identifier of the comment to be updated
- * @param props.body - The new content and display_name for update (display_name
- *   is ignored)
- * @returns The updated comment with all fields populated
- * @throws {Error} When comment does not exist
- * @throws {Error} When the authenticated member is not the author of the
- *   comment
+ * @param props.commentId - UUID of the comment to update
+ * @param props.body - Request body with optional content and display_name
+ * @returns The updated comment
+ * @throws {Error} When comment is not found
+ * @throws {Error} When member is not the author of the comment
  */
 export async function putmyCommentsCommentId(props: {
   member: MemberPayload;
@@ -35,47 +34,45 @@ export async function putmyCommentsCommentId(props: {
 }): Promise<IComment> {
   const { member, commentId, body } = props;
 
-  // Fetch comment with its member record for display_name and ownership verification
-  const comment = await MyGlobal.prisma.communitybbs_comment.findUnique({
+  // Find the comment by ID
+  const comment = await MyGlobal.prisma.communitybbs_comment.findUniqueOrThrow({
     where: { id: commentId },
-    include: { author: true },
   });
 
-  // Handle case where comment does not exist
-  if (!comment) {
-    throw new Error("Comment not found");
-  }
-
-  // Verify that authenticated member is the author of the comment
-  if (member.id !== comment.communitybbs_member_id) {
+  // Verify that the authenticated member is the author
+  if (comment.communitybbs_member_id !== member.id) {
     throw new Error("Unauthorized: You can only update your own comments");
   }
 
-  // Build update data object
-  // - content: update if provided (body.content !== undefined), otherwise keep current value
-  // - updated_at: always update to current timestamp (ISO string)
-  const updateData = {
-    content: body.content !== undefined ? body.content : comment.content,
-    updated_at: toISOStringSafe(new Date()),
-  };
+  // Prepare update data
+  const updateData: {
+    content?: string;
+    updated_at?: string & tags.Format<"date-time">;
+  } = {};
 
-  // Perform the update
+  // Only update content if provided in body
+  if (body.content !== undefined) {
+    updateData.content = body.content;
+  }
+
+  // Always update updated_at to current time
+  updateData.updated_at = toISOStringSafe(new Date());
+
+  // Perform update and return
   const updated = await MyGlobal.prisma.communitybbs_comment.update({
     where: { id: commentId },
     data: updateData,
   });
 
-  // Construct and return the IComment response
+  // Return fully-resolved IComment type
   return {
-    id: comment.id,
-    postId: comment.communitybbs_post_id,
-    author: comment.author.display_name, // Correctly using the relation name "author"
-    parentId: comment.communitybbs_comment_id,
+    id: updated.id,
+    postId: updated.communitybbs_post_id,
+    author: updated.display_name || "Anonymous",
+    parentId: updated.communitybbs_comment_id || undefined,
     content: updated.content,
-    created_at: toISOStringSafe(comment.created_at),
-    updated_at: toISOStringSafe(updated.updated_at),
-    deleted_at: comment.deleted_at
-      ? toISOStringSafe(comment.deleted_at)
-      : undefined,
+    created_at: updated.created_at,
+    updated_at: updated.updated_at || undefined,
+    deleted_at: updated.deleted_at ?? null,
   };
 }

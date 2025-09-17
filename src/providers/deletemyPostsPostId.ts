@@ -7,22 +7,24 @@ import { toISOStringSafe } from "../util/toISOStringSafe";
 import { MemberPayload } from "../decorators/payload/MemberPayload";
 
 /**
- * Delete a user’s own post.
+ * Delete a user's own post (soft delete).
  *
  * This operation permanently removes a post authored by the authenticated
- * member. Uses the communitybbs_post table, where it updates the deleted_at
- * field to mark the post as deleted (soft delete). This behavior is determined
- * by the presence of the deleted_at column in the Prisma schema, which exists
- * for soft deletion capability. The operation is only permitted if the
- * member_id matches the post's communitybbs_member_id. Authorization is
- * role-based to the member who created the post.
+ * member. When called, it performs a soft delete by updating the deleted_at
+ * field in the communitybbs_post table from null to the current timestamp. This
+ * preserves historical data and allows potential recovery by moderators.
+ *
+ * The operation checks that the communitybbs_member_id of the post matches the
+ * id of the currently authenticated member to ensure ownership. If the post is
+ * already deleted or does not exist, the system returns a 404 error. This
+ * behavior aligns with the requirement that users can only delete their own
+ * posts.
  *
  * @param props - Request properties
- * @param props.member - The authenticated member making the deletion request
- * @param props.postId - The unique identifier of the post to be deleted. Must
- *   be an existing record in communitybbs_post.id and authored by the member.
+ * @param props.member - The authenticated member making the request
+ * @param props.postId - The unique identifier of the post to be deleted
  * @returns Void
- * @throws {Error} When the post does not exist (404)
+ * @throws {Error} When the post doesn't exist
  * @throws {Error} When the authenticated member is not the author of the post
  */
 export async function deletemyPostsPostId(props: {
@@ -31,14 +33,17 @@ export async function deletemyPostsPostId(props: {
 }): Promise<void> {
   const { member, postId } = props;
 
+  // Fetch the post to verify existence and ownership
   const post = await MyGlobal.prisma.communitybbs_post.findUniqueOrThrow({
     where: { id: postId },
   });
 
+  // Verify ownership: only the author can delete
   if (post.communitybbs_member_id !== member.id) {
     throw new Error("Unauthorized: You can only delete your own posts");
   }
 
+  // Perform soft delete by setting deleted_at to current timestamp
   await MyGlobal.prisma.communitybbs_post.update({
     where: { id: postId },
     data: {

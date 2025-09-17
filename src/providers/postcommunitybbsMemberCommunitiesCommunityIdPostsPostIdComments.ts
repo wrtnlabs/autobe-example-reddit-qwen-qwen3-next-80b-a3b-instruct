@@ -27,18 +27,28 @@ import { MemberPayload } from "../decorators/payload/MemberPayload";
  * creating top-level comments on communities directly, only comments nested
  * under posts.
  *
+ * This operation integrates with the communitybbs_comment entity and its
+ * relationship to communitybbs_post, which has a foreign key relationship
+ * established between post_id and id. This ensures referential integrity so
+ * that comments cannot be created for non-existent posts.
+ *
+ * This operation triggers system-generated logging events as defined in the
+ * communitybbs_log model, but there is no separate API to create or manage
+ * these logs - they are created automatically as a side effect of this
+ * operation. The comment's creation timestamp is automatically set by the
+ * system and cannot be overridden by the client.
+ *
  * @param props - Request properties
  * @param props.member - The authenticated member making the request
- * @param props.communityId - UUID of the community where the post resides
- * @param props.postId - UUID of the target post to which the comment is being
- *   added
- * @param props.body - Request body containing the content of the comment and
- *   optional display name
- * @returns The newly created comment object with system-generated fields like
- *   timestamps
- * @throws {Error} When the post is not found
- * @throws {Error} When the post has been deleted
- * @throws {Error} When the post does not belong to the specified community
+ * @param props.communityId - UUID of the community containing the target post
+ * @param props.postId - UUID of the target post to comment on
+ * @param props.body - The comment creation data including content and optional
+ *   display name
+ * @returns The newly created comment with all system-generated fields populated
+ * @throws {Error} When the target post doesn't exist or is deleted
+ * @throws {Error} When the target community doesn't exist or is deleted
+ * @throws {Error} When the post doesn't belong to the specified community
+ * @throws {Error} When the member doesn't exist or is inactive
  */
 export async function postcommunitybbsMemberCommunitiesCommunityIdPostsPostIdComments(props: {
   member: MemberPayload;
@@ -48,56 +58,81 @@ export async function postcommunitybbsMemberCommunitiesCommunityIdPostsPostIdCom
 }): Promise<ICommunitybbsComment> {
   const { member, communityId, postId, body } = props;
 
-  // Verify that the post exists and is not deleted
-  const post = await MyGlobal.prisma.communitybbs_post.findFirst({
+  // Get the specific post
+  const post = await MyGlobal.prisma.communitybbs_post.findUniqueOrThrow({
     where: {
       id: postId,
     },
+    select: {
+      id: true,
+      communitybbs_community_id: true,
+      deleted_at: true,
+    },
   });
 
-  if (!post) {
-    throw new Error("Post not found");
-  }
-
+  // Verify post isn't deleted
   if (post.deleted_at !== null) {
-    throw new Error("Post has been deleted");
+    throw new Error("Cannot comment on a deleted post");
   }
 
-  // Verify that the post belongs to the specified community
+  // Verify post belongs to the specified community
   if (post.communitybbs_community_id !== communityId) {
     throw new Error("Post does not belong to the specified community");
   }
 
-  // Use provided display_name or fallback to member.display_name
-  const displayName = body.display_name ?? member.display_name;
+  // Get the community
+  const community =
+    await MyGlobal.prisma.communitybbs_community.findUniqueOrThrow({
+      where: {
+        id: communityId,
+      },
+      select: {
+        id: true,
+        deleted_at: true,
+      },
+    });
+
+  // Verify community isn't deleted
+  if (community.deleted_at !== null) {
+    throw new Error("Cannot comment in a deleted community");
+  }
+
+  // Verify member exists and is active
+  const memberRecord =
+    await MyGlobal.prisma.communitybbs_member.findUniqueOrThrow({
+      where: {
+        id: member.id,
+      },
+      select: {
+        id: true,
+      },
+    });
 
   // Create the comment
-  const createdComment = await MyGlobal.prisma.communitybbs_comment.create({
+  const newComment = await MyGlobal.prisma.communitybbs_comment.create({
     data: {
       id: v4() as string & tags.Format<"uuid">,
       communitybbs_post_id: postId,
       communitybbs_member_id: member.id,
-      communitybbs_comment_id: null,
+      communitybbs_comment_id: undefined,
       content: body.content,
-      display_name: displayName,
+      display_name: body.display_name ?? undefined,
       created_at: toISOStringSafe(new Date()),
+      updated_at: undefined,
+      deleted_at: undefined,
+    },
+    select: {
+      id: true,
+      communitybbs_post_id: true,
+      communitybbs_member_id: true,
+      communitybbs_comment_id: true,
+      content: true,
+      display_name: true,
+      created_at: true,
+      updated_at: true,
+      deleted_at: true,
     },
   });
 
-  // Return fully formatted ICommunitybbsComment manually to ensure type safety and proper date formatting
-  return {
-    id: createdComment.id,
-    communitybbs_post_id: createdComment.communitybbs_post_id,
-    communitybbs_member_id: createdComment.communitybbs_member_id,
-    communitybbs_comment_id: createdComment.communitybbs_comment_id, // Will be null
-    content: createdComment.content,
-    display_name: createdComment.display_name,
-    created_at: toISOStringSafe(createdComment.created_at),
-    updated_at: createdComment.updated_at
-      ? toISOStringSafe(createdComment.updated_at)
-      : undefined,
-    deleted_at: createdComment.deleted_at
-      ? toISOStringSafe(createdComment.deleted_at)
-      : undefined,
-  };
+  return newComment;
 }

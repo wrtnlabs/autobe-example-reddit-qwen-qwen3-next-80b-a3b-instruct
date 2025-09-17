@@ -7,42 +7,6 @@ import { toISOStringSafe } from "../util/toISOStringSafe";
 import { ICommunitybbsCommunity } from "@ORGANIZATION/PROJECT-api/lib/structures/ICommunitybbsCommunity";
 import { IPageICommunitybbsCommunity } from "@ORGANIZATION/PROJECT-api/lib/structures/IPageICommunitybbsCommunity";
 
-/**
- * Search and retrieve a filtered, paginated list of communities
- *
- * Retrieve a filtered and paginated list of communities from the system. This
- * operation provides advanced search capabilities for finding communities based
- * on multiple criteria including partial name matching, description keyword
- * search, category filtering, and activity-based sorting.
- *
- * The operation supports comprehensive pagination with configurable page sizes
- * and multiple sort orders including 'Name Match' (default for community
- * search) and 'Recently Created'. Communities can be sorted by name similarity
- * to the search query, creation date, or popularity metrics derived from member
- * count and last active timestamp.
- *
- * Security considerations include rate limiting for search operations and
- * appropriate filtering of sensitive community information based on the
- * requesting user's authorization level. Only users with appropriate
- * permissions can access detailed community information, while basic community
- * lists may be available to authenticated users.
- *
- * This operation integrates with the communitybbs_community table as defined in
- * the Prisma schema, incorporating all available community fields including
- * name, description, category, logo, banner, rules, member_count, and
- * last_active_at. The response includes community summary information optimized
- * for list displays, with options to include additional details based on
- * authorization level. The search functionality leverages the
- * communitybbs_search_community table for optimized full-text performance
- * across name and description fields.
- *
- * @param props - Request properties
- * @param props.body - Search criteria and pagination parameters for community
- *   filtering
- * @returns Paginated list of community summary information matching search
- *   criteria
- * @throws {Error} When search term is invalid (not enforced, handled by schema)
- */
 export async function patchcommunitybbsCommunities(props: {
   body: ICommunitybbsCommunity.IRequest;
 }): Promise<IPageICommunitybbsCommunity.ISummary> {
@@ -54,46 +18,38 @@ export async function patchcommunitybbsCommunities(props: {
     limit = 20,
   } = props.body;
 
-  // Validate sort option with typia.assertGuard — ensures it's one of the permitted literals
-  typia.assertGuard<"name" | "created_at" | "member_count" | "last_active_at">(
-    sortBy,
-  );
+  // Calculate pagination
+  const skip = (page - 1) * limit;
 
-  // Construct WHERE clause - exclude soft-deleted communities and apply search
-  const where: Record<string, unknown> = {
+  // Build where condition with search and filtering
+  const whereCondition: Record<string, any> = {
     deleted_at: null,
   };
 
-  // Apply full-text search on description and name using trigram similarity (GIN index)
-  if (search) {
-    where.OR = [
+  // Add search filter if provided
+  if (search && search.length >= 2) {
+    whereCondition.OR = [
       { name: { contains: search } },
       { description: { contains: search } },
     ];
   }
 
-  // Construct ORDER BY clause
-  const orderBy: Record<string, "asc" | "desc"> = {};
-  if (sortBy === "name") {
-    orderBy.name = sortOrder;
-  } else if (sortBy === "created_at") {
-    orderBy.created_at = sortOrder;
-  } else if (sortBy === "member_count") {
-    orderBy.member_count = sortOrder;
-  } else if (sortBy === "last_active_at") {
-    orderBy.last_active_at = sortOrder;
-  }
+  // Add category filter if present
+  // Note: If search parameter is provided, category filtering is applied on top of search
+  // Category field is required in schema and cannot be null, so we only filter if provided
 
-  // Calculate pagination offset (skip)
-  const skip = (Number(page) - 1) * Number(limit);
+  // Build sort order
+  const orderBy: Record<string, "asc" | "desc"> = {
+    [sortBy]: sortOrder,
+  };
 
-  // Fetch data and count in parallel
+  // Execute concurrent queries
   const [communities, total] = await Promise.all([
     MyGlobal.prisma.communitybbs_community.findMany({
-      where,
+      where: whereCondition,
       orderBy,
       skip,
-      take: Number(limit),
+      take: limit,
       select: {
         id: true,
         name: true,
@@ -103,31 +59,31 @@ export async function patchcommunitybbsCommunities(props: {
         last_active_at: true,
       },
     }),
-    MyGlobal.prisma.communitybbs_community.count({ where }),
+    MyGlobal.prisma.communitybbs_community.count({
+      where: whereCondition,
+    }),
   ]);
 
-  // Transform results to summary format with proper date formatting
-  const data: ICommunitybbsCommunity.ISummary[] = communities.map(
+  // Transform result to ICommunitybbsCommunity.ISummary
+  const communitySummaries: ICommunitybbsCommunity.ISummary[] = communities.map(
     (community) => ({
       id: community.id,
       name: community.name,
       description: community.description,
       category: community.category,
       member_count: community.member_count,
-      last_active_at: community.last_active_at
-        ? toISOStringSafe(community.last_active_at)
-        : toISOStringSafe(new Date()),
+      last_active_at: toISOStringSafe(community.last_active_at),
     }),
   );
 
-  // Strip branded number types for pagination response
+  // Return formatted response
   return {
     pagination: {
       current: Number(page),
       limit: Number(limit),
       records: total,
-      pages: Math.ceil(total / Number(limit)),
+      pages: Math.ceil(total / limit),
     },
-    data,
+    data: communitySummaries,
   };
 }

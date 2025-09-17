@@ -13,63 +13,89 @@ export async function postauthMemberJoin(props: {
   displayName: string;
   body: IMember.ICreate;
 }): Promise<ICommunitybbsMember.IAuthorized> {
-  const { email, password, displayName } = props;
+  // Extract and validate parameters from props
+  const { email, password, displayName, body } = props;
 
-  const id = v4() as string & tags.Format<"uuid">;
-  const hashedPassword = await MyGlobal.password.hash(password);
+  // Use the body for consistency with DTO, prefer body.display_name over displayName
+  const display_name =
+    body.display_name ?? (displayName ? displayName : undefined);
 
-  const computedDisplayName =
-    displayName !== undefined ? displayName : email.split("@")[0];
-  const now = toISOStringSafe(new Date());
+  // Generate a new UUID for the member
+  const id: string & tags.Format<"uuid"> = v4();
 
-  const created = await MyGlobal.prisma.communitybbs_member.create({
+  // Hash the password using MyGlobal.password.hash
+  const hashed_password = await MyGlobal.password.hash(password);
+
+  // Get current timestamp as ISO string
+  const now: string & tags.Format<"date-time"> = toISOStringSafe(new Date());
+
+  // Create the new member record in the database
+  const createdMember = await MyGlobal.prisma.communitybbs_member.create({
     data: {
       id,
       email,
-      password_hash: hashedPassword,
-      display_name: computedDisplayName,
+      password_hash: hashed_password,
+      display_name: display_name ?? undefined, // Use undefined for optional field
       created_at: now,
       updated_at: now,
     },
   });
 
-  const token = v4() as string;
-  const expiresAt = toISOStringSafe(new Date(Date.now() + 1000 * 60 * 60));
-  const refreshableUntil = toISOStringSafe(
-    new Date(Date.now() + 1000 * 60 * 60 * 24 * 7),
-  );
+  // Generate a session token for the new user
+  const sessionToken = v4();
+  const expiresAt: string & tags.Format<"date-time"> = toISOStringSafe(
+    new Date(Date.now() + 1 * 60 * 60 * 1000),
+  ); // 1 hour
+  const refreshExpiresAt: string & tags.Format<"date-time"> = toISOStringSafe(
+    new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+  ); // 7 days
 
-  const session = await MyGlobal.prisma.communitybbs_session.create({
+  // Create the session record in the database
+  await MyGlobal.prisma.communitybbs_session.create({
     data: {
-      actor_id: created.id,
-      token,
+      id: v4(),
+      actor_id: createdMember.id,
+      token: sessionToken,
       expires_at: expiresAt,
-      last_activity_at: expiresAt,
+      last_activity_at: now,
       created_at: now,
       updated_at: now,
       is_valid: true,
     },
   });
 
+  // Generate JWT tokens
   const accessToken = jwt.sign(
-    { userId: created.id, email },
+    {
+      userId: createdMember.id,
+    },
     MyGlobal.env.JWT_SECRET_KEY,
-    { expiresIn: "1h", issuer: "autobe" },
+    {
+      expiresIn: "1h",
+      issuer: "autobe",
+    },
   );
 
   const refreshToken = jwt.sign(
-    { userId: created.id, tokenType: "refresh" },
+    {
+      userId: createdMember.id,
+      tokenType: "refresh",
+    },
     MyGlobal.env.JWT_SECRET_KEY,
-    { expiresIn: "7d", issuer: "autobe" },
+    {
+      expiresIn: "7d",
+      issuer: "autobe",
+    },
   );
 
+  // Return the authorized response
   return {
-    id: created.id,
+    id: createdMember.id,
     token: {
       access: accessToken,
       refresh: refreshToken,
       expired_at: expiresAt,
-      refreshable_until: refreshableUntil,
+      refreshable_until: refreshExpiresAt,
     },
   };
 }

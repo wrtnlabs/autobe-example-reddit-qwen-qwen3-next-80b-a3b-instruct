@@ -14,28 +14,93 @@ export async function putcommunitybbsMemberCommunitiesCommunityId(props: {
 }): Promise<ICommunitybbsCommunity> {
   const { member, communityId, body } = props;
 
-  // Fetch the community to verify its existence and current state
+  // Fetch the community to verify existence and ownership
   const community =
     await MyGlobal.prisma.communitybbs_community.findUniqueOrThrow({
       where: { id: communityId },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        category: true,
+        logo: true,
+        banner: true,
+        rules: true,
+        created_at: true,
+        updated_at: true,
+        deleted_at: true,
+        member_count: true,
+        last_active_at: true,
+        communitybbs_member_id: true,
+      },
     });
 
-  // The API specification requires ownership validation - only the community creator can update it
-  // However, the Prisma schema for communitybbs_community does NOT include any creator_id or owner_id field
-  // It only has: id, name, description, category, logo, banner, rules, created_at, updated_at, deleted_at, member_count, last_active_at
-  // This creates a fundamental contradiction: the business requirement cannot be implemented with the given schema
+  // Check ownership: only the creator (member who created community) can update
+  if (community.communitybbs_member_id !== member.id) {
+    throw new Error(
+      "Unauthorized: You can only update communities you created",
+    );
+  }
 
-  // According to the Realize Coder Agent guidelines:
-  // "If required fields or relationships are missing or incompatible, the plan should explicitly state that the implementation is not possible with the current schema/DTO, and no code should be generated in later stages."
-  // "In such cases, only a detailed comment in the implementationCode should be returned explaining why the logic cannot be implemented."
+  // Check if community is deleted (soft delete)
+  if (community.deleted_at !== null) {
+    throw new Error("Cannot update a deleted community");
+  }
 
-  // Since we cannot validate ownership (the required authorization check),
-  // and we cannot assume authorization bypass is acceptable,
-  // we must return a fallback response with explanation
+  // Prepare update data
+  const updateData: {
+    description?: string | null;
+    category?: string | null;
+    logo?: string | null;
+    banner?: string | null;
+    rules?: string | null;
+    updated_at: string & tags.Format<"date-time">;
+    last_active_at: string & tags.Format<"date-time">;
+  } = {
+    updated_at: toISOStringSafe(new Date()),
+    last_active_at: toISOStringSafe(new Date()),
+  };
 
-  // ⚠️ Cannot implement ownership validation: Prisma schema communitybbs_community lacks creator_id field
-  // The API requires member ownership validation for updates, but the database model provides no way to
-  // determine which member created the community. This contradiction cannot be resolved without schema modification.
-  // Therefore, this function returns mock data matching the expected response structure.
-  return typia.random<ICommunitybbsCommunity>();
+  // Only include fields that are explicitly provided in the request
+  if (body.description !== undefined) {
+    updateData.description = body.description;
+  }
+
+  if (body.category !== undefined) {
+    updateData.category = body.category;
+  }
+
+  if (body.logo !== undefined) {
+    updateData.logo = body.logo;
+  }
+
+  if (body.banner !== undefined) {
+    updateData.banner = body.banner;
+  }
+
+  if (body.rules !== undefined) {
+    updateData.rules = body.rules;
+  }
+
+  // Update the community
+  const updated = await MyGlobal.prisma.communitybbs_community.update({
+    where: { id: communityId },
+    data: updateData,
+  });
+
+  // Return the updated community with all required fields
+  return {
+    id: updated.id,
+    name: updated.name,
+    description: updated.description,
+    category: updated.category,
+    logo: updated.logo,
+    banner: updated.banner,
+    rules: updated.rules,
+    created_at: updated.created_at,
+    updated_at: updated.updated_at,
+    deleted_at: updated.deleted_at,
+    member_count: updated.member_count,
+    last_active_at: updated.last_active_at,
+  };
 }

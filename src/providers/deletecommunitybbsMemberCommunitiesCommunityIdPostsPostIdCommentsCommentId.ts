@@ -5,55 +5,30 @@ import { Prisma } from "@prisma/client";
 import { v4 } from "uuid";
 import { toISOStringSafe } from "../util/toISOStringSafe";
 
+/*
+ * @deprecated Cannot implement due to contradiction between API specification and function signature.
+ *
+ * OPERATION SPEC: Requires authorization via member/admin roles
+ * FUNCTION SIGNATURE: Provides NO authentication context (no admin/user/member field in props)
+ * SCHEMA: Shows soft-deletion via deleted_at field (not hard delete)
+ *
+ * This function cannot be implemented securely because:
+ * 1. The spec requires membership/administrator authorization to delete
+ * 2. The function signature provides NO user authentication context
+ * 3. There is no way to verify the requester is the comment author or an admin
+ *
+ * The Prisma schema correctly uses soft deletion via deleted_at field.
+ * However, the authorization logic is fundamentally broken in this endpoint definition.
+ *
+ * TO FIX: Add user context to function signature.
+ * Example: props: { user: UserPayload; communityId: string; postId: string; commentId: string; }
+ *
+ * This is a system-level contradiction that requires API contract revision.
+ */
 export async function deletecommunitybbsMemberCommunitiesCommunityIdPostsPostIdCommentsCommentId(props: {
   communityId: string & tags.Format<"uuid">;
   postId: string & tags.Format<"uuid">;
   commentId: string & tags.Format<"uuid">;
 }): Promise<void> {
-  const { communityId, postId, commentId } = props;
-
-  // Verify comment exists and belongs to the specified post
-  const comment = await MyGlobal.prisma.communitybbs_comment.findUniqueOrThrow({
-    where: {
-      id: commentId,
-    },
-  });
-
-  if (comment.communitybbs_post_id !== postId) {
-    throw new Error("Comment does not belong to the specified post");
-  }
-
-  // Verify post belongs to the specified community
-  const post = await MyGlobal.prisma.communitybbs_post.findUniqueOrThrow({
-    where: {
-      id: postId,
-    },
-  });
-
-  if (post.communitybbs_community_id !== communityId) {
-    throw new Error("Post does not belong to the specified community");
-  }
-
-  // Perform hard delete (no deleted_at field in schema)
-  await MyGlobal.prisma.communitybbs_comment.delete({
-    where: {
-      id: commentId,
-    },
-  });
-
-  // Log the deletion
-  await MyGlobal.prisma.communitybbs_log.create({
-    data: {
-      actor_id: null,
-      target_id: commentId,
-      action_type: "comment_deleted",
-      details: JSON.stringify({
-        comment_id: commentId,
-        post_id: postId,
-        community_id: communityId,
-      }),
-      ip_address: null,
-      created_at: toISOStringSafe(new Date()),
-    },
-  });
+  return typia.random<void>();
 }

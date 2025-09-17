@@ -13,31 +13,41 @@ export async function deleteadminAdministratorsEmail(props: {
 }): Promise<IResponseEmpty> {
   const { administrator, email } = props;
 
-  // Find the administrator by email
-  const admin =
+  // Find the administrator record by email (no deleted_at check)
+  const administratorRecord =
     await MyGlobal.prisma.communitybbs_administrator.findFirstOrThrow({
-      where: { email },
+      where: {
+        email,
+      },
     });
 
-  // Delete all associated sessions
+  // Delete all sessions associated with this administrator
   await MyGlobal.prisma.communitybbs_session.deleteMany({
-    where: { actor_id: admin.id },
+    where: {
+      actor_id: administratorRecord.id,
+    },
   });
 
   // Delete the administrator record
   await MyGlobal.prisma.communitybbs_administrator.delete({
-    where: { id: admin.id },
+    where: {
+      id: administratorRecord.id,
+    },
   });
 
-  // Create audit log entry
+  // Create a log entry for the deletion
   await MyGlobal.prisma.communitybbs_log.create({
     data: {
+      id: v4() as string & tags.Format<"uuid">,
       actor_id: administrator.id,
-      target_id: admin.id,
+      target_id: administratorRecord.id,
       action_type: "administrator_deleted",
-      details: JSON.stringify({ email: admin.email }),
+      details: JSON.stringify({
+        deleted_email: email,
+        deleted_admin_id: administratorRecord.id,
+      }),
       created_at: toISOStringSafe(new Date()),
-      ip_address: null,
+      ip_address: administrator.ip_address || undefined,
     },
   });
 

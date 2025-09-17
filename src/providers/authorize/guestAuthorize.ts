@@ -1,4 +1,4 @@
-import { ForbiddenException } from "@nestjs/common";
+import { ForbiddenException, UnauthorizedException } from "@nestjs/common";
 
 import { MyGlobal } from "../../MyGlobal";
 import { jwtAuthorize } from "./jwtAuthorize";
@@ -15,9 +15,8 @@ export async function guestAuthorize(request: {
     throw new ForbiddenException(`You're not ${payload.type}`);
   }
 
-  // payload.id contains top-level user table ID
-  // Query using appropriate field based on schema structure
-  // Guest is a standalone top-level entity with primary key 'id'
+  // For guest role, payload.id contains the guest session ID
+  // Query the communitybbs_guest table using the ID from payload
   const guest = await MyGlobal.prisma.communitybbs_guest.findFirst({
     where: {
       id: payload.id,
@@ -25,7 +24,7 @@ export async function guestAuthorize(request: {
   });
 
   if (guest === null) {
-    throw new ForbiddenException("You're not enrolled");
+    throw new ForbiddenException("You're not enrolled as a guest");
   }
 
   return payload;

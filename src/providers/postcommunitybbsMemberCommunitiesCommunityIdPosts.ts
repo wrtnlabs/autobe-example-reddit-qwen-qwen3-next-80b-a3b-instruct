@@ -14,18 +14,17 @@ export async function postcommunitybbsMemberCommunitiesCommunityIdPosts(props: {
 }): Promise<ICommunitybbsPost> {
   const { member, communityId, body } = props;
 
-  // Authorization check: Verify member exists in database
-  const memberRecord = await MyGlobal.prisma.communitybbs_member.findFirst({
-    where: {
-      id: member.id,
-    },
-  });
+  // Verify community exists and is not deleted
+  const community =
+    await MyGlobal.prisma.communitybbs_community.findUniqueOrThrow({
+      where: {
+        id: communityId,
+        deleted_at: null,
+      },
+    });
 
-  if (!memberRecord) {
-    throw new Error("Unauthorized: Member not found");
-  }
-
-  // Create post with explicit types and conversion
+  // Create the post
+  const now = toISOStringSafe(new Date());
   const createdPost = await MyGlobal.prisma.communitybbs_post.create({
     data: {
       id: v4() as string & tags.Format<"uuid">,
@@ -33,14 +32,25 @@ export async function postcommunitybbsMemberCommunitiesCommunityIdPosts(props: {
       communitybbs_member_id: member.id,
       title: body.title,
       body: body.body,
-      display_name: body.display_name,
-      created_at: toISOStringSafe(new Date()),
+      display_name: body.display_name ?? undefined,
+      created_at: now,
       updated_at: undefined,
       deleted_at: undefined,
     },
   });
 
-  // Return explicitly typed object to guarantee type safety
+  // Update community's last_active_at and increment member_count
+  await MyGlobal.prisma.communitybbs_community.update({
+    where: {
+      id: communityId,
+    },
+    data: {
+      last_active_at: now,
+      member_count: community.member_count + 1,
+    },
+  });
+
+  // Return the created post
   return {
     id: createdPost.id,
     communitybbs_community_id: createdPost.communitybbs_community_id,
@@ -48,12 +58,8 @@ export async function postcommunitybbsMemberCommunitiesCommunityIdPosts(props: {
     title: createdPost.title,
     body: createdPost.body,
     display_name: createdPost.display_name,
-    created_at: toISOStringSafe(createdPost.created_at),
-    updated_at: createdPost.updated_at
-      ? toISOStringSafe(createdPost.updated_at)
-      : undefined,
-    deleted_at: createdPost.deleted_at
-      ? toISOStringSafe(createdPost.deleted_at)
-      : undefined,
+    created_at: createdPost.created_at,
+    updated_at: createdPost.updated_at,
+    deleted_at: createdPost.deleted_at,
   };
 }

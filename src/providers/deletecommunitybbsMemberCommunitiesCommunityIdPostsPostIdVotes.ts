@@ -13,18 +13,13 @@ export async function deletecommunitybbsMemberCommunitiesCommunityIdPostsPostIdV
 }): Promise<void> {
   const { member, postId } = props;
 
-  // Find the vote associated with the member and post
-  const vote = await MyGlobal.prisma.communitybbs_vote.findFirst({
+  // Find the vote by actor_id and post_id
+  const vote = await MyGlobal.prisma.communitybbs_vote.findFirstOrThrow({
     where: {
       actor_id: member.id,
       post_id: postId,
     },
   });
-
-  // If no vote exists, return early (204 No Content)
-  if (!vote) {
-    return;
-  }
 
   // Delete the vote record
   await MyGlobal.prisma.communitybbs_vote.delete({

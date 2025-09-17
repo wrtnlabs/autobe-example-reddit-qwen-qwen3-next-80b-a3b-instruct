@@ -12,40 +12,56 @@ export async function postvotes(props: {
   body: IVote.ICreate;
 }): Promise<IVote> {
   const { member, body } = props;
+  const actor_id = member.id;
 
-  // Validate mutually exclusive target: exactly one of post_id or comment_id must be provided
-  if (body.post_id !== undefined && body.comment_id !== undefined) {
-    throw new Error("Cannot vote on both post and comment");
-  }
+  // Validate exactly one target is provided
   if (body.post_id === undefined && body.comment_id === undefined) {
-    throw new Error("Must vote on either a post or a comment");
+    throw new Error("Either post_id or comment_id must be provided");
   }
 
-  // Validate target existence and authorship
-  if (body.post_id !== undefined) {
-    const post = await MyGlobal.prisma.communitybbs_post.findUniqueOrThrow({
+  if (body.post_id !== undefined && body.comment_id !== undefined) {
+    throw new Error(
+      "Cannot provide both post_id and comment_id; only one target allowed",
+    );
+  }
+
+  // Fetch target post or comment based on provided ID
+  let target: { author_id: string } | null = null;
+
+  if (body.post_id !== undefined && body.post_id !== null) {
+    const post = await MyGlobal.prisma.communitybbs_post.findUnique({
       where: { id: body.post_id },
+      select: { author_id: true },
     });
-    // Prevent self-voting: member cannot vote on their own post
-    if (post.communitybbs_member_id === member.id) {
-      throw new Error("Cannot vote on your own post");
+
+    if (!post) {
+      throw new Error("Target post not found");
     }
-  } else if (body.comment_id !== undefined) {
-    const comment =
-      await MyGlobal.prisma.communitybbs_comment.findUniqueOrThrow({
-        where: { id: body.comment_id },
-      });
-    // Prevent self-voting: member cannot vote on their own comment
-    if (comment.communitybbs_member_id === member.id) {
-      throw new Error("Cannot vote on your own comment");
+
+    target = post;
+  } else if (body.comment_id !== undefined && body.comment_id !== null) {
+    const comment = await MyGlobal.prisma.communitybbs_comment.findUnique({
+      where: { id: body.comment_id },
+      select: { author_id: true },
+    });
+
+    if (!comment) {
+      throw new Error("Target comment not found");
     }
+
+    target = comment;
   }
 
-  // Create the vote record - inline Prisma operation (no intermediate variables)
-  const createdVote = await MyGlobal.prisma.communitybbs_vote.create({
+  // Validate user not voting on own content
+  if (target && target.author_id === actor_id) {
+    throw new Error("Cannot vote on your own content");
+  }
+
+  // Create the vote
+  const created = await MyGlobal.prisma.communitybbs_vote.create({
     data: {
       id: v4() as string & tags.Format<"uuid">,
-      actor_id: member.id,
+      actor_id,
       post_id: body.post_id === null ? undefined : body.post_id,
       comment_id: body.comment_id === null ? undefined : body.comment_id,
       type: body.type,
@@ -53,13 +69,12 @@ export async function postvotes(props: {
     },
   });
 
-  // Return compliant IVote object - matching interface exactly
   return {
-    id: createdVote.id,
-    actor_id: createdVote.actor_id,
-    post_id: createdVote.post_id,
-    comment_id: createdVote.comment_id,
-    type: createdVote.type,
-    created_at: createdVote.created_at, // Already string & Format<'date-time'> from Prisma
+    id: created.id,
+    actor_id: created.actor_id,
+    post_id: created.post_id,
+    comment_id: created.comment_id,
+    type: created.type,
+    created_at: created.created_at,
   };
 }

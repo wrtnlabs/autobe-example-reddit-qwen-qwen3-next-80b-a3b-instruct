@@ -12,61 +12,61 @@ export async function getcommunitiesCommunityIdPostsPostId(props: {
 }): Promise<ICommunitybbsPost.ISummary> {
   const { communityId, postId } = props;
 
-  // Fetch the post - ensure it belongs to the correct community and is not deleted
-  const post = await MyGlobal.prisma.communitybbs_post.findFirst({
+  const result = await MyGlobal.prisma.communitybbs_post.findFirst({
     where: {
       id: postId,
       communitybbs_community_id: communityId,
       deleted_at: null,
     },
+    select: {
+      id: true,
+      communitybbs_community_id: true,
+      title: true,
+      display_name: true,
+      created_at: true,
+    },
   });
 
-  if (!post) {
-    throw new Error("Post not found");
+  if (!result) {
+    throw new Error("Post not found or inaccessible");
   }
 
-  // Count active comments for this post
-  const commentCount = await MyGlobal.prisma.communitybbs_comment.count({
+  // Compute comment count from non-deleted comments
+  const commentCountResult = await MyGlobal.prisma.communitybbs_comment.count({
     where: {
       communitybbs_post_id: postId,
       deleted_at: null,
     },
   });
 
-  // Count upvotes
-  const upvotes = await MyGlobal.prisma.communitybbs_vote.count({
+  // Compute score: sum of upvotes minus downvotes
+  const voteResult = await MyGlobal.prisma.communitybbs_vote.groupBy({
+    by: ["post_id"],
     where: {
       post_id: postId,
-      type: "upvote",
+      comment_id: null, // Only count votes directly on the post, not on comments
+    },
+    _sum: {
+      type: true,
     },
   });
 
-  // Count downvotes
-  const downvotes = await MyGlobal.prisma.communitybbs_vote.count({
-    where: {
-      post_id: postId,
-      type: "downvote",
-    },
-  });
+  // Calculate score: upvote = 1, downvote = -1; if no votes, score = 0
+  let score = 0;
+  if (voteResult.length > 0) {
+    const total = voteResult[0]._sum.type;
+    if (total !== null) {
+      score = total as number;
+    }
+  }
 
-  // Calculate score
-  const score = upvotes - downvotes;
-
-  // Convert null display_name to undefined to match optional field in ICommunitybbsPost.ISummary
-  const displayName =
-    post.display_name === null ? undefined : post.display_name;
-
-  // Format all date fields correctly using toISOStringSafe
-  const createdAt = toISOStringSafe(post.created_at);
-
-  // Return the summary object
   return {
-    id: post.id,
-    communitybbs_community_id: post.communitybbs_community_id,
-    title: post.title,
-    display_name: displayName,
-    created_at: createdAt,
-    comment_count: commentCount,
+    id: result.id,
+    communitybbs_community_id: result.communitybbs_community_id,
+    title: result.title,
+    display_name: result.display_name,
+    created_at: toISOStringSafe(result.created_at),
+    comment_count: commentCountResult,
     score: score,
   };
 }
