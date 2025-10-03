@@ -1,56 +1,55 @@
-import jwt from "jsonwebtoken";
-import { MyGlobal } from "../MyGlobal";
-import typia, { tags } from "typia";
+import { HttpException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import jwt from "jsonwebtoken";
+import typia, { tags } from "typia";
 import { v4 } from "uuid";
-import { toISOStringSafe } from "../util/toISOStringSafe";
+import { MyGlobal } from "../MyGlobal";
+import { PasswordUtil } from "../utils/PasswordUtil";
+import { toISOStringSafe } from "../utils/toISOStringSafe";
+
 import { IMember } from "@ORGANIZATION/PROJECT-api/lib/structures/IMember";
-import { ICommunitybbsMember } from "@ORGANIZATION/PROJECT-api/lib/structures/ICommunitybbsMember";
+import { ICommunityPlatformMember } from "@ORGANIZATION/PROJECT-api/lib/structures/ICommunityPlatformMember";
+import { IAuthorizationToken } from "@ORGANIZATION/PROJECT-api/lib/structures/IAuthorizationToken";
+import { MemberPayload } from "../decorators/payload/MemberPayload";
 
-export async function postauthMemberLogin(props: {
-  email: string & tags.Format<"email">;
-  password: string;
+export async function postAuthMemberLogin(props: {
+  member: MemberPayload;
   body: IMember.ILogin;
-}): Promise<ICommunitybbsMember.IAuthorized> {
-  const { email, password } = props;
+}): Promise<ICommunityPlatformMember.IAuthorized> {
+  const { email, password_hash } = props.body;
 
-  // Find the member by email
-  const member = await MyGlobal.prisma.communitybbs_member.findUniqueOrThrow({
-    where: { email },
-  });
-
-  // Verify password
-  const isValid = await MyGlobal.password.verify(
-    password,
-    member.password_hash,
-  );
-  if (!isValid) {
-    throw new Error("Login failed. Please try again.");
-  }
-
-  // Generate session token
-  const sessionId = v4() as string & tags.Format<"uuid">;
-  const now = toISOStringSafe(new Date());
-  const expiresAt = toISOStringSafe(new Date(Date.now() + 60 * 60 * 1000)); // 1 hour
-  const refreshUntil = toISOStringSafe(
-    new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-  ); // 7 days
-
-  // Create session record
-  await MyGlobal.prisma.communitybbs_session.create({
-    data: {
-      id: sessionId,
-      actor_id: member.id,
-      token: sessionId, // Using session ID as token for simplicity
-      expires_at: expiresAt,
-      last_activity_at: now,
-      created_at: now,
-      updated_at: now,
-      is_valid: true,
+  // Find member by email and ensure account is not deleted
+  const member = await MyGlobal.prisma.community_platform_member.findUnique({
+    where: {
+      email,
+      deleted_at: null,
     },
   });
 
-  // Generate JWT tokens
+  // If member not found or password invalid, throw unauthorized
+  if (!member) {
+    throw new HttpException("Invalid credentials", 401);
+  }
+
+  // Verify password using PasswordUtil
+  const isValid = await PasswordUtil.verify(
+    password_hash,
+    member.password_hash,
+  );
+  if (!isValid) {
+    throw new HttpException("Invalid credentials", 401);
+  }
+
+  // Generate token timestamps using toISOStringSafe
+  const now = toISOStringSafe(new Date());
+  const expired_at = toISOStringSafe(
+    new Date(new Date(now).getTime() + 30 * 60 * 1000),
+  ); // 30 minutes
+  const refreshable_until = toISOStringSafe(
+    new Date(new Date(now).getTime() + 30 * 24 * 60 * 60 * 1000),
+  ); // 30 days
+
+  // Generate JWT tokens with explicit issuer 'autobe'
   const accessToken = jwt.sign(
     {
       userId: member.id,
@@ -59,7 +58,7 @@ export async function postauthMemberLogin(props: {
     },
     MyGlobal.env.JWT_SECRET_KEY,
     {
-      expiresIn: "1h",
+      expiresIn: "30m",
       issuer: "autobe",
     },
   );
@@ -71,19 +70,31 @@ export async function postauthMemberLogin(props: {
     },
     MyGlobal.env.JWT_SECRET_KEY,
     {
-      expiresIn: "7d",
+      expiresIn: "30d",
       issuer: "autobe",
     },
   );
 
-  // Return the authorized response
+  // Return response with all date fields converted using toISOStringSafe()
   return {
     id: member.id,
+    email: member.email,
+    display_name:
+      member.display_name !== null
+        ? (member.display_name satisfies string as string)
+        : undefined,
+    created_at: toISOStringSafe(member.created_at),
+    last_login_at: member.last_login_at
+      ? toISOStringSafe(member.last_login_at)
+      : undefined,
+    deleted_at: member.deleted_at
+      ? toISOStringSafe(member.deleted_at)
+      : undefined,
     token: {
       access: accessToken,
       refresh: refreshToken,
-      expired_at: expiresAt,
-      refreshable_until: refreshUntil,
+      expired_at,
+      refreshable_until,
     },
   };
 }

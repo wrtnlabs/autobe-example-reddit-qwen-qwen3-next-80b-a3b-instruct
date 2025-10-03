@@ -1,0 +1,180 @@
+/// Materialized view for full-text search of community names and
+/// descriptions. This is a denormalized copy of
+/// community_platform_communities data, optimized for search performance.
+/// Only updated via system triggers when source communities are created,
+/// updated or deleted. Not directly modifiable by users.
+///
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model community_platform_search_communities {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Reference to the source community in community_platform_communities.
+  /// {@link community_platform_communities.id}.
+  community_id String
+  
+  /// The unique name of the community (e.g., 'ai' or 'gaming'), used for exact
+  /// and fuzzy search matching.
+  name String
+  
+  /// The optional description of the community, included in full-text search
+  /// to match user queries about community topics.
+  description String?
+  
+  /// The category designation of the community from the predefined list (e.g.,
+  /// 'Tech & Programming', 'Science'). Used for category-based filtering in
+  /// search.
+  category String
+  
+  /// The current count of members in this community (1k, 10k, 1m abbreviated).
+  /// Used for popularity ranking in search results.
+  member_count Int
+  
+  /// Timestamp of when this search view entry was created or last updated from
+  /// the source community.
+  created_at DateTime
+  
+  /// Timestamp of when this search view entry was last updated from the source
+  /// community.
+  updated_at DateTime
+  
+  //----
+  // RELATIONS
+  //----
+  community community_platform_communities @relation(fields: [community_id], references: [id], onDelete: Cascade)
+  
+  @@unique([community_id])
+  @@unique([name])
+  @@index([created_at])
+  @@index([updated_at])
+  @@index([category])
+  @@index([member_count])
+}
+
+/// Materialized view for full-text search of post titles and bodies. This is
+/// a denormalized copy of community_platform_posts data, optimized for
+/// search performance. Only updated via system triggers when source posts
+/// are created, updated or deleted. Not directly modifiable by users.
+///
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model community_platform_search_posts {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Reference to the source post in community_platform_posts. {@link
+  /// community_platform_posts.id}.
+  post_id String
+  
+  /// Reference to the community where this post was created
+  /// (community_platform_communities). {@link
+  /// community_platform_communities.id}.
+  community_id String
+  
+  /// The title of the post (5-120 characters), used for exact and fuzzy search
+  /// matching.
+  title String
+  
+  /// The main content of the post (10-10,000 characters), included in
+  /// full-text search to match user queries about post content.
+  body String
+  
+  /// The display name of the author (or 'Anonymous' if not set), used to
+  /// search for content by author.
+  author_name String
+  
+  /// The calculated score of the post (upvotes - downvotes), used for Top sort
+  /// ranking in search results.
+  score Int
+  
+  /// The number of comments on this post, used for popularity ranking in
+  /// search results.
+  comment_count Int
+  
+  /// Timestamp of when this search view entry was created or last updated from
+  /// the source post.
+  created_at DateTime
+  
+  /// Timestamp of when this search view entry was last updated from the source
+  /// post.
+  updated_at DateTime
+  
+  //----
+  // RELATIONS
+  //----
+  post community_platform_posts @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  community community_platform_communities @relation(fields: [community_id], references: [id], onDelete: Cascade)
+  
+  @@unique([post_id])
+  @@index([community_id])
+  @@index([created_at])
+  @@index([updated_at])
+  @@index([score])
+  @@index([comment_count])
+}
+
+/// Materialized view for full-text search of comment content. This is a
+/// denormalized copy of community_platform_comments data, optimized for
+/// search performance. Only updated via system triggers when source comments
+/// are created, updated or deleted. Not directly modifiable by users.
+///
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model community_platform_search_comments {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Reference to the source comment in community_platform_comments. {@link
+  /// community_platform_comments.id}.
+  comment_id String
+  
+  /// Reference to the post this comment belongs to (community_platform_posts).
+  /// {@link community_platform_posts.id}.
+  post_id String
+  
+  /// Reference to the community where this comment was made
+  /// (community_platform_communities). {@link
+  /// community_platform_communities.id}.
+  community_id String
+  
+  /// The text content of the comment (2-2,000 characters), used for full-text
+  /// search matching.
+  content String
+  
+  /// The display name of the comment author (or 'Anonymous' if not set), used
+  /// to search for comments by author.
+  author_name String
+  
+  /// The calculated score of the comment (upvotes - downvotes), used for
+  /// ranking in search results.
+  score Int
+  
+  /// Timestamp of when this search view entry was created or last updated from
+  /// the source comment.
+  created_at DateTime
+  
+  /// Timestamp of when this search view entry was last updated from the source
+  /// comment.
+  updated_at DateTime
+  
+  //----
+  // RELATIONS
+  //----
+  comment community_platform_comments @relation(fields: [comment_id], references: [id], onDelete: Cascade)
+  post community_platform_posts @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  community community_platform_communities @relation(fields: [community_id], references: [id], onDelete: Cascade)
+  
+  @@unique([comment_id])
+  @@index([post_id])
+  @@index([community_id])
+  @@index([created_at])
+  @@index([updated_at])
+  @@index([score])
+}

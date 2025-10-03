@@ -1,0 +1,93 @@
+/// Tracks individual upvotes and downvotes by users on posts. Each record
+/// represents a single vote from a user on a specific post, enforcing
+/// uniqueness to ensure one vote per user per post. The vote state can be
+/// upvote, downvote, or none (implicitly tracked by the absence of a
+/// record). This empowers efficient score calculation (upvotes - downvotes)
+/// and prevents self-voting through foreign key constraints to
+/// community_platform_posts.
+///
+/// @namespace Votes
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model community_platform_post_votes {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// The post that was voted on. {@link community_platform_posts.id}.
+  community_platform_post_id String
+  
+  /// The user who cast this vote. {@link community_platform_member.id}.
+  community_platform_user_id String
+  
+  /// The timestamp when the vote was cast. Used for ordering and determining
+  /// vote age.
+  created_at DateTime
+  
+  /// The timestamp when the vote was last updated (e.g., changed from upvote
+  /// to downvote).
+  updated_at DateTime
+  
+  /// The current state of the vote ('upvote' or 'downvote'). A record's
+  /// existence implies a vote, and this field defines its direction.
+  /// Implicitly, 'none' is represented by the absence of a record.
+  vote_state String
+  
+  //----
+  // RELATIONS
+  //----
+  post community_platform_posts @relation(fields: [community_platform_post_id], references: [id], onDelete: Cascade)
+  user community_platform_member @relation(fields: [community_platform_user_id], references: [id], onDelete: Cascade)
+  
+  @@unique([community_platform_post_id, community_platform_user_id], map: "community_platform_post_votes_community_platform_post__786c2464")
+  @@index([community_platform_post_id, created_at], map: "community_platform_post_votes_community_platform_post__80871491")
+  @@index([community_platform_user_id, created_at], map: "community_platform_post_votes_community_platform_user__00277ed4")
+}
+
+/// Tracks individual upvotes and downvotes by users on comments. Each record
+/// represents a single vote from a user on a specific comment, enforcing
+/// uniqueness to ensure one vote per user per comment. The vote state can be
+/// upvote, downvote, or none (implicitly tracked by the absence of a
+/// record). This empowers efficient score calculation (upvotes - downvotes)
+/// and prevents self-voting through foreign key constraints to
+/// community_platform_comments.
+///
+/// @namespace Votes
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model community_platform_comment_votes {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// The comment that was voted on. {@link community_platform_comments.id}.
+  community_platform_comment_id String
+  
+  /// The user who cast this vote. {@link community_platform_member.id}.
+  community_platform_user_id String
+  
+  /// The timestamp when the vote was cast. Used for ordering and determining
+  /// vote age.
+  created_at DateTime
+  
+  /// The timestamp when the vote was last updated (e.g., changed from upvote
+  /// to downvote).
+  updated_at DateTime
+  
+  /// The current state of the vote ('upvote' or 'downvote'). A record's
+  /// existence implies a vote, and this field defines its direction.
+  /// Implicitly, 'none' is represented by the absence of a record.
+  vote_state String
+  
+  //----
+  // RELATIONS
+  //----
+  comment community_platform_comments @relation(fields: [community_platform_comment_id], references: [id], onDelete: Cascade)
+  user community_platform_member @relation(fields: [community_platform_user_id], references: [id], onDelete: Cascade)
+  
+  @@unique([community_platform_comment_id, community_platform_user_id], map: "community_platform_comment_votes_community_platform_co_34b24ea4")
+  @@index([community_platform_comment_id, created_at], map: "community_platform_comment_votes_community_platform_co_68a9b5f7")
+  @@index([community_platform_user_id, created_at], map: "community_platform_comment_votes_community_platform_us_f33e6829")
+}

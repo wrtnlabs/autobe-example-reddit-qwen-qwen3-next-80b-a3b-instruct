@@ -1,0 +1,99 @@
+/// Denormalized statistics counter for member count of communities. This
+/// table is updated atomically on every user join or leave action to avoid
+/// expensive COUNT queries on the community_platform_user_communities
+/// junction table during feed rendering. Used by the home page to display
+/// member counts as 1k, 10k, etc. This is a subsidiary table with
+/// denormalized data that supports high-frequency read operations.
+///
+/// @namespace Analytics
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model community_platform_community_stats {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Reference to the community this statistic belongs to. {@link
+  /// community_platform_communities.id}.
+  community_platform_community_id String
+  
+  /// The current number of members in this community. Updated atomically on
+  /// every join/leave action. Never exceeds 10M and is formatted as 1k, 10k,
+  /// 1m in UI.
+  member_count Int
+  
+  //----
+  // RELATIONS
+  //----
+  community community_platform_communities @relation(fields: [community_platform_community_id], references: [id], onDelete: Cascade)
+  
+  @@unique([community_platform_community_id], map: "community_platform_community_stats_community_platform__a95e4f55")
+}
+
+/// Denormalized statistics counter for total score (upvotes minus downvotes)
+/// of posts. This table is updated atomically on every vote action
+/// (upvote/downvote/toggle) to avoid expensive COUNT queries on the
+/// community_platform_post_votes table during top-sorting of feeds and
+/// global latest sidebar. Used to calculate and display the score in posts
+/// without performing joins or aggregations at query time. This is a
+/// subsidiary table with denormalized data.
+///
+/// @namespace Analytics
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model community_platform_post_stats {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Reference to the post this statistic belongs to. {@link
+  /// community_platform_posts.id}.
+  community_platform_post_id String
+  
+  /// The total score of the post calculated as (upvotes - downvotes). Updated
+  /// atomically on every vote event to optimize high-frequency sorting by
+  /// "Top" in feeds and Global Latest sidebar.
+  score Int
+  
+  //----
+  // RELATIONS
+  //----
+  post community_platform_posts @relation(fields: [community_platform_post_id], references: [id], onDelete: Cascade)
+  
+  @@unique([community_platform_post_id])
+}
+
+/// Denormalized statistics counter for total score (upvotes minus downvotes)
+/// of comments. This table is updated atomically on every vote action
+/// (upvote/downvote/toggle) to avoid expensive COUNT queries on the
+/// community_platform_comment_votes table during comment rendering. Used to
+/// calculate and display comment score efficiently on post detail pages and
+/// search results. This is a subsidiary table with denormalized data.
+///
+/// @namespace Analytics
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model community_platform_comment_stats {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Reference to the comment this statistic belongs to. {@link
+  /// community_platform_comments.id}.
+  community_platform_comment_id String
+  
+  /// The total score of the comment calculated as (upvotes - downvotes).
+  /// Updated atomically on every vote event to optimize high-frequency display
+  /// of comment scores in threaded discussions.
+  score Int
+  
+  //----
+  // RELATIONS
+  //----
+  comment community_platform_comments @relation(fields: [community_platform_comment_id], references: [id], onDelete: Cascade)
+  
+  @@unique([community_platform_comment_id], map: "community_platform_comment_stats_community_platform_co_7939d99a")
+}

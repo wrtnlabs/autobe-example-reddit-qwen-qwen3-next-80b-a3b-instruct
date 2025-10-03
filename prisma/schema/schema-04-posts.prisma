@@ -1,0 +1,128 @@
+/// Main content entities created by members within communities. Posts are
+/// text-only with title and body, linked to a community and author.
+/// Ownership is account-based: only the author can edit or delete. Cascading
+/// delete on community removal. Created_at and updated_at track lifecycle;
+/// deleted_at enables soft delete. Comment count and score are maintained in
+/// separate post_stats table; no denormalized counts here to ensure 3NF
+/// compliance.
+///
+/// @namespace Posts
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model community_platform_posts {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Community to which this post belongs. {@link
+  /// community_platform_communities.id}.
+  community_id String
+  
+  /// Member who authored this post. {@link community_platform_member.id}.
+  author_id String
+  
+  /// Post title. Must be between 5 and 120 characters. Plain text only, no
+  /// HTML or formatting.
+  title String
+  
+  /// Post body content. Must be between 10 and 10,000 characters. Plain text
+  /// with \n line breaks only, no scripts or executable content.
+  body String
+  
+  /// Optional display name for the author. If empty or null, system displays
+  /// "Anonymous". Maximum 32 characters.
+  author_display_name String?
+  
+  /// Timestamp when the post was created. Always set on creation.
+  created_at DateTime
+  
+  /// Timestamp when the post was last updated. Updated on each edit.
+  updated_at DateTime
+  
+  /// Soft delete timestamp. If null, post is active. If set, post is deleted
+  /// and hidden from feeds.
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  community community_platform_communities @relation(fields: [community_id], references: [id], onDelete: Cascade)
+  author community_platform_member @relation(fields: [author_id], references: [id], onDelete: Cascade)
+  
+  community_platform_comments community_platform_comments[]
+  community_platform_post_votes community_platform_post_votes[]
+  community_platform_search_posts community_platform_search_posts?
+  community_platform_search_comments community_platform_search_comments[]
+  community_platform_post_stats community_platform_post_stats?
+  
+  @@unique([community_id, id])
+  @@index([created_at, id])
+  @@index([author_id, created_at])
+  @@index([community_id, created_at])
+}
+
+/// Nested comments on posts or other comments. Each comment has a single
+/// parent (post or comment) and is authored by a member. Comments support
+/// unlimited nesting, ordered by creation time. Only the author can
+/// edit/delete. Soft delete supported via deleted_at. All content is plain
+/// text. Comment counts are stored in separate comment_stats table to
+/// maintain normalization. This is a primary entity because users require
+/// independent comment management: search by user, moderation workflows,
+/// cross-post visibility.
+///
+/// @namespace Posts
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model community_platform_comments {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Post that this comment belongs to. CASCADE DELETE when post is removed.
+  /// {@link community_platform_posts.id}.
+  post_id String
+  
+  /// Member who authored this comment. {@link community_platform_member.id}.
+  author_id String
+  
+  /// Parent comment this comment replies to. Self-referential relationship. If
+  /// null, comment is top-level (directly under post). {@link
+  /// community_platform_comments.id}.
+  parent_id String?
+  
+  /// Full text content of the comment. Must be between 2 and 2,000 characters.
+  /// Plain text with \n line breaks only. No HTML, code, or executable content
+  /// permitted.
+  content String
+  
+  /// Timestamp when the comment was created. Always set on creation.
+  created_at DateTime
+  
+  /// Timestamp when the comment was last updated. Updated on each edit.
+  updated_at DateTime
+  
+  /// Soft delete timestamp. If null, comment is active. If set, comment is
+  /// deleted and hidden from views.
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  post community_platform_posts @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  author community_platform_member @relation(fields: [author_id], references: [id], onDelete: Cascade)
+  parent community_platform_comments? @relation("recursive", fields: [parent_id], references: [id], onDelete: Cascade)
+  
+  recursive community_platform_comments[] @relation("recursive")
+  community_platform_comment_votes community_platform_comment_votes[]
+  community_platform_search_comments community_platform_search_comments?
+  community_platform_comment_stats community_platform_comment_stats?
+  
+  @@unique([post_id, id])
+  @@unique([parent_id, id])
+  @@index([post_id, created_at, id])
+  @@index([author_id, created_at])
+  @@index([parent_id, created_at])
+  @@index([created_at, id])
+}

@@ -1,66 +1,58 @@
 import { Module } from "@nestjs/common";
 
 import { AuthGuestController } from "./controllers/auth/guest/AuthGuestController";
-import { AuthMemberController } from "./controllers/auth/member/refresh/AuthMemberController";
-import { MyPostsController } from "./controllers/my/posts/MyPostsController";
-import { PostsController } from "./controllers/posts/PostsController";
-import { MyCommentsController } from "./controllers/my/comments/MyCommentsController";
-import { CommentsController } from "./controllers/comments/CommentsController";
-import { VotesController } from "./controllers/votes/VotesController";
-import { CommunitiesJoinController } from "./controllers/communities/join/CommunitiesJoinController";
-import { CommunitiesLeaveController } from "./controllers/communities/leave/CommunitiesLeaveController";
-import { AuthAdministratorController } from "./controllers/auth/administrator/refresh/AuthAdministratorController";
-import { AdminCommunitiesController } from "./controllers/admin/communities/AdminCommunitiesController";
-import { AdminCommunitiesPermanent_deleteController } from "./controllers/admin/communities/permanent-delete/AdminCommunitiesPermanent_deleteController";
-import { AdminAdministratorsController } from "./controllers/admin/administrators/AdminAdministratorsController";
-import { AdminMembersController } from "./controllers/admin/members/AdminMembersController";
-import { CommunitybbsCommunitiesController } from "./controllers/communitybbs/communities/CommunitybbsCommunitiesController";
-import { CommunitybbsMemberCommunitiesController } from "./controllers/communitybbs/member/communities/CommunitybbsMemberCommunitiesController";
-import { CommunitybbsAdministratorCommunitiesController } from "./controllers/communitybbs/administrator/communities/CommunitybbsAdministratorCommunitiesController";
-import { CommunitybbsCommunitiesPostsController } from "./controllers/communitybbs/communities/posts/CommunitybbsCommunitiesPostsController";
-import { CommunitybbsMemberCommunitiesPostsController } from "./controllers/communitybbs/member/communities/posts/CommunitybbsMemberCommunitiesPostsController";
-import { CommunitiesController } from "./controllers/communities/CommunitiesController";
-import { CommunitiesPostsController } from "./controllers/communities/posts/CommunitiesPostsController";
-import { CommunitybbsMemberCommunitiesPostsCommentsController } from "./controllers/communitybbs/member/communities/posts/comments/CommunitybbsMemberCommunitiesPostsCommentsController";
-import { CommunitybbsAdministratorCommunitiesPostsCommentsController } from "./controllers/communitybbs/administrator/communities/posts/comments/CommunitybbsAdministratorCommunitiesPostsCommentsController";
-import { CommunitybbsAdministratorCommunitiesPostsController } from "./controllers/communitybbs/administrator/communities/posts/CommunitybbsAdministratorCommunitiesPostsController";
-import { CommunitybbsMemberCommunitiesPostsVotesController } from "./controllers/communitybbs/member/communities/posts/votes/CommunitybbsMemberCommunitiesPostsVotesController";
-import { CommunitiesPostsCommentsController } from "./controllers/communities/posts/comments/CommunitiesPostsCommentsController";
-import { CommunitiesPostsVotesController } from "./controllers/communities/posts/votes/CommunitiesPostsVotesController";
-import { CommunitybbsMemberCommunitiesPostsCommentsVotesController } from "./controllers/communitybbs/member/communities/posts/comments/votes/CommunitybbsMemberCommunitiesPostsCommentsVotesController";
-import { CommunitybbsController } from "./controllers/communitybbs/search/CommunitybbsController";
+import { AuthMemberController } from "./controllers/auth/member/AuthMemberController";
+import { AuthAdminController } from "./controllers/auth/admin/AuthAdminController";
+import { CommunityplatformRolesController } from "./controllers/communityPlatform/roles/CommunityplatformRolesController";
+import { CommunityplatformAdminGuestsController } from "./controllers/communityPlatform/admin/guests/CommunityplatformAdminGuestsController";
+import { CommunityplatformAdminMembersController } from "./controllers/communityPlatform/admin/members/CommunityplatformAdminMembersController";
+import { CommunityplatformMemberMembersController } from "./controllers/communityPlatform/member/members/CommunityplatformMemberMembersController";
+import { CommunityplatformAdminAdminMembersController } from "./controllers/communityPlatform/admin/admin/members/CommunityplatformAdminAdminMembersController";
+import { CommunityplatformCommunitiesController } from "./controllers/communityPlatform/communities/CommunityplatformCommunitiesController";
+import { CommunityplatformMemberCommunitiesController } from "./controllers/communityPlatform/member/communities/CommunityplatformMemberCommunitiesController";
+import { CommunityplatformCommunitiesMembersController } from "./controllers/communityPlatform/communities/members/CommunityplatformCommunitiesMembersController";
+import { CommunityplatformMemberCommunitiesMembersController } from "./controllers/communityPlatform/member/communities/members/CommunityplatformMemberCommunitiesMembersController";
+import { CommunityplatformPostsController } from "./controllers/communityPlatform/posts/CommunityplatformPostsController";
+import { CommunityplatformMemberPostsController } from "./controllers/communityPlatform/member/posts/CommunityplatformMemberPostsController";
+import { CommunityplatformPostsCommentsController } from "./controllers/communityPlatform/posts/comments/CommunityplatformPostsCommentsController";
+import { CommunityplatformMemberPostsCommentsController } from "./controllers/communityPlatform/member/posts/comments/CommunityplatformMemberPostsCommentsController";
+import { CommunityplatformMemberPostsVotesController } from "./controllers/communityPlatform/member/posts/votes/CommunityplatformMemberPostsVotesController";
+import { CommunityplatformMemberCommentsVotesController } from "./controllers/communityPlatform/member/comments/votes/CommunityplatformMemberCommentsVotesController";
+import { CommunityplatformMemberUsersCommunitiesController } from "./controllers/communityPlatform/member/users/communities/CommunityplatformMemberUsersCommunitiesController";
+import { CommunityplatformSearchPostsController } from "./controllers/communityPlatform/search/posts/CommunityplatformSearchPostsController";
+import { CommunityplatformSearchSub_communitiesController } from "./controllers/communityPlatform/search/sub-communities/CommunityplatformSearchSub_communitiesController";
+import { CommunityplatformSearchCommentsController } from "./controllers/communityPlatform/search/comments/CommunityplatformSearchCommentsController";
+import { CommunityplatformAnalyticsCommunitiesMember_countController } from "./controllers/communityPlatform/analytics/communities/member-count/CommunityplatformAnalyticsCommunitiesMember_countController";
+import { CommunityplatformAnalyticsPostsScoreController } from "./controllers/communityPlatform/analytics/posts/score/CommunityplatformAnalyticsPostsScoreController";
+import { CommunityplatformAnalyticsCommentsScoreController } from "./controllers/communityPlatform/analytics/comments/score/CommunityplatformAnalyticsCommentsScoreController";
 
 @Module({
   controllers: [
     AuthGuestController,
     AuthMemberController,
-    MyPostsController,
-    PostsController,
-    MyCommentsController,
-    CommentsController,
-    VotesController,
-    CommunitiesJoinController,
-    CommunitiesLeaveController,
-    AuthAdministratorController,
-    AdminCommunitiesController,
-    AdminCommunitiesPermanent_deleteController,
-    AdminAdministratorsController,
-    AdminMembersController,
-    CommunitybbsCommunitiesController,
-    CommunitybbsMemberCommunitiesController,
-    CommunitybbsAdministratorCommunitiesController,
-    CommunitybbsCommunitiesPostsController,
-    CommunitybbsMemberCommunitiesPostsController,
-    CommunitiesController,
-    CommunitiesPostsController,
-    CommunitybbsMemberCommunitiesPostsCommentsController,
-    CommunitybbsAdministratorCommunitiesPostsCommentsController,
-    CommunitybbsAdministratorCommunitiesPostsController,
-    CommunitybbsMemberCommunitiesPostsVotesController,
-    CommunitiesPostsCommentsController,
-    CommunitiesPostsVotesController,
-    CommunitybbsMemberCommunitiesPostsCommentsVotesController,
-    CommunitybbsController,
+    AuthAdminController,
+    CommunityplatformRolesController,
+    CommunityplatformAdminGuestsController,
+    CommunityplatformAdminMembersController,
+    CommunityplatformMemberMembersController,
+    CommunityplatformAdminAdminMembersController,
+    CommunityplatformCommunitiesController,
+    CommunityplatformMemberCommunitiesController,
+    CommunityplatformCommunitiesMembersController,
+    CommunityplatformMemberCommunitiesMembersController,
+    CommunityplatformPostsController,
+    CommunityplatformMemberPostsController,
+    CommunityplatformPostsCommentsController,
+    CommunityplatformMemberPostsCommentsController,
+    CommunityplatformMemberPostsVotesController,
+    CommunityplatformMemberCommentsVotesController,
+    CommunityplatformMemberUsersCommunitiesController,
+    CommunityplatformSearchPostsController,
+    CommunityplatformSearchSub_communitiesController,
+    CommunityplatformSearchCommentsController,
+    CommunityplatformAnalyticsCommunitiesMember_countController,
+    CommunityplatformAnalyticsPostsScoreController,
+    CommunityplatformAnalyticsCommentsScoreController,
   ],
 })
 export class MyModule {}

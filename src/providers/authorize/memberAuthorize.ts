@@ -1,4 +1,4 @@
-import { ForbiddenException } from "@nestjs/common";
+import { ForbiddenException, UnauthorizedException } from "@nestjs/common";
 
 import { MyGlobal } from "../../MyGlobal";
 import { jwtAuthorize } from "./jwtAuthorize";
@@ -15,12 +15,11 @@ export async function memberAuthorize(request: {
     throw new ForbiddenException(`You're not ${payload.type}`);
   }
 
-  // payload.id contains top-level user table ID
-  // Since communitybbs_member is the primary authentication entity with no soft-delete,
-  // query by id directly without deleted_at filter
-  const member = await MyGlobal.prisma.communitybbs_member.findFirst({
+  // Member table is standalone - use direct id lookup with soft-delete filter
+  const member = await MyGlobal.prisma.community_platform_member.findFirst({
     where: {
       id: payload.id,
+      deleted_at: null,
     },
   });
 

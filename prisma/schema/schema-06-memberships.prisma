@@ -1,0 +1,73 @@
+/// Junction table tracking the dynamic relationship between users and
+/// communities. This table enables the 'Recent Communities' list
+/// functionality and content filtering for the home feed. Each record
+/// represents a user's membership status in a community and tracks when the
+/// user last interacted with that community (through join, post, comment, or
+/// vote). The record is soft-deleted when a user leaves a community,
+/// enabling rejoining and maintaining activity history. This is a supporting
+/// table managed exclusively through user actions on community pages, not
+/// independently.
+///
+/// Key Business Rules:
+/// - Users can join and leave communities dynamically
+/// - The last_interaction_at field determines ordering in the 'Recent
+/// Communities' list
+/// - active status is tracked through deleted_at (not is_joined)
+/// - This table must support efficient queries for 'Recent Communities' list
+/// (top 5 by last_interaction_at)
+/// - This table supports home feed filtering by excluding posts from
+/// communities where deleted_at is not null
+/// - This table has no independent API endpoints - managed only through
+/// community join/leave actions in UI
+///
+/// @link community_platform_users.id - The user who has established membership
+/// @link community_platform_communities.id - The community the user is
+/// associated with
+///
+/// @namespace Memberships
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model community_platform_user_communities {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// The user who has established membership. {@link
+  /// community_platform_member.id}.
+  community_platform_user_id String
+  
+  /// The community the user is associated with. {@link
+  /// community_platform_communities.id}.
+  community_platform_community_id String
+  
+  /// Timestamp when the membership relationship was established. This is
+  /// immutable once set.
+  created_at DateTime
+  
+  /// Timestamp of the last update to this membership record. Updated on any
+  /// interaction (join, post, comment, vote).
+  updated_at DateTime
+  
+  /// Timestamp when the user left the community. When null, the membership is
+  /// active; when set, the membership is inactive. Used for soft deletion to
+  /// maintain history and enable rejoining.
+  deleted_at DateTime?
+  
+  /// Timestamp of the user's most recent activity within this community. This
+  /// field is updated when the user joins, posts, comments, or votes. Used to
+  /// sort and maintain the 'Recent Communities' list with the most recently
+  /// active communities appearing first.
+  last_interaction_at DateTime
+  
+  //----
+  // RELATIONS
+  //----
+  user community_platform_member @relation(fields: [community_platform_user_id], references: [id], onDelete: Cascade)
+  community community_platform_communities @relation(fields: [community_platform_community_id], references: [id], onDelete: Cascade)
+  
+  @@unique([community_platform_user_id, community_platform_community_id], map: "community_platform_user_communities_community_platform_91b0ffa3")
+  @@index([community_platform_user_id, last_interaction_at], map: "community_platform_user_communities_community_platform_4708137b")
+  @@index([community_platform_community_id, last_interaction_at], map: "community_platform_user_communities_community_platform_869d0475")
+  @@index([deleted_at])
+}

@@ -1,101 +1,93 @@
-import jwt from "jsonwebtoken";
-import { MyGlobal } from "../MyGlobal";
-import typia, { tags } from "typia";
+import { HttpException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import jwt from "jsonwebtoken";
+import typia, { tags } from "typia";
 import { v4 } from "uuid";
-import { toISOStringSafe } from "../util/toISOStringSafe";
+import { MyGlobal } from "../MyGlobal";
+import { PasswordUtil } from "../utils/PasswordUtil";
+import { toISOStringSafe } from "../utils/toISOStringSafe";
+
 import { IMember } from "@ORGANIZATION/PROJECT-api/lib/structures/IMember";
-import { ICommunitybbsMember } from "@ORGANIZATION/PROJECT-api/lib/structures/ICommunitybbsMember";
+import { ICommunityPlatformMember } from "@ORGANIZATION/PROJECT-api/lib/structures/ICommunityPlatformMember";
+import { IAuthorizationToken } from "@ORGANIZATION/PROJECT-api/lib/structures/IAuthorizationToken";
+import { MemberPayload } from "../decorators/payload/MemberPayload";
 
-export async function postauthMemberJoin(props: {
-  email: string & tags.Format<"email">;
-  password: string;
-  displayName: string;
-  body: IMember.ICreate;
-}): Promise<ICommunitybbsMember.IAuthorized> {
-  // Extract and validate parameters from props
-  const { email, password, displayName, body } = props;
+export async function postAuthMemberJoin(props: {
+  member: MemberPayload;
+  body: IMember.IJoin;
+}): Promise<ICommunityPlatformMember.IAuthorized> {
+  const { email, password_hash } = props.body;
 
-  // Use the body for consistency with DTO, prefer body.display_name over displayName
-  const display_name =
-    body.display_name ?? (displayName ? displayName : undefined);
+  try {
+    // Always hash password server-side for security (even if provided)
+    const hashedPassword = await PasswordUtil.hash(password_hash);
 
-  // Generate a new UUID for the member
-  const id: string & tags.Format<"uuid"> = v4();
+    // Create new member record with ID and timestamps
+    const created = await MyGlobal.prisma.community_platform_member.create({
+      data: {
+        id: v4(),
+        email,
+        password_hash: hashedPassword,
+        created_at: toISOStringSafe(new Date()),
+      },
+    });
 
-  // Hash the password using MyGlobal.password.hash
-  const hashed_password = await MyGlobal.password.hash(password);
+    // Generate JWT tokens with consistent timestamp reference
+    const now = new Date();
+    const expiredAt = new Date(now.getTime() + 3600000);
+    const refreshableUntil = new Date(now.getTime() + 604800000);
 
-  // Get current timestamp as ISO string
-  const now: string & tags.Format<"date-time"> = toISOStringSafe(new Date());
+    const accessToken = jwt.sign(
+      {
+        userId: created.id,
+        email: created.email,
+        type: "member",
+      },
+      MyGlobal.env.JWT_SECRET_KEY,
+      {
+        expiresIn: "1h",
+        issuer: "autobe",
+      },
+    );
 
-  // Create the new member record in the database
-  const createdMember = await MyGlobal.prisma.communitybbs_member.create({
-    data: {
-      id,
-      email,
-      password_hash: hashed_password,
-      display_name: display_name ?? undefined, // Use undefined for optional field
-      created_at: now,
-      updated_at: now,
-    },
-  });
+    const refreshToken = jwt.sign(
+      {
+        userId: created.id,
+        tokenType: "refresh",
+      },
+      MyGlobal.env.JWT_SECRET_KEY,
+      {
+        expiresIn: "7d",
+        issuer: "autobe",
+      },
+    );
 
-  // Generate a session token for the new user
-  const sessionToken = v4();
-  const expiresAt: string & tags.Format<"date-time"> = toISOStringSafe(
-    new Date(Date.now() + 1 * 60 * 60 * 1000),
-  ); // 1 hour
-  const refreshExpiresAt: string & tags.Format<"date-time"> = toISOStringSafe(
-    new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-  ); // 7 days
-
-  // Create the session record in the database
-  await MyGlobal.prisma.communitybbs_session.create({
-    data: {
-      id: v4(),
-      actor_id: createdMember.id,
-      token: sessionToken,
-      expires_at: expiresAt,
-      last_activity_at: now,
-      created_at: now,
-      updated_at: now,
-      is_valid: true,
-    },
-  });
-
-  // Generate JWT tokens
-  const accessToken = jwt.sign(
-    {
-      userId: createdMember.id,
-    },
-    MyGlobal.env.JWT_SECRET_KEY,
-    {
-      expiresIn: "1h",
-      issuer: "autobe",
-    },
-  );
-
-  const refreshToken = jwt.sign(
-    {
-      userId: createdMember.id,
-      tokenType: "refresh",
-    },
-    MyGlobal.env.JWT_SECRET_KEY,
-    {
-      expiresIn: "7d",
-      issuer: "autobe",
-    },
-  );
-
-  // Return the authorized response
-  return {
-    id: createdMember.id,
-    token: {
-      access: accessToken,
-      refresh: refreshToken,
-      expired_at: expiresAt,
-      refreshable_until: refreshExpiresAt,
-    },
-  };
+    // Return fully typed response with strict string & tags.Format<'date-time'>
+    return {
+      id: created.id,
+      email: created.email,
+      display_name: created.display_name ?? undefined,
+      created_at: toISOStringSafe(created.created_at),
+      last_login_at: created.last_login_at
+        ? toISOStringSafe(created.last_login_at)
+        : undefined,
+      deleted_at: created.deleted_at
+        ? toISOStringSafe(created.deleted_at)
+        : undefined,
+      token: {
+        access: accessToken,
+        refresh: refreshToken,
+        expired_at: toISOStringSafe(expiredAt),
+        refreshable_until: toISOStringSafe(refreshableUntil),
+      },
+    };
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === "P2002") {
+        // Unique constraint failed
+        throw new HttpException("Email already registered", 409);
+      }
+    }
+    throw new HttpException("Internal server error", 500);
+  }
 }

@@ -1,141 +1,122 @@
-/// Represents an unauthenticated user session. Each guest has a unique IP
-/// address and is tracked for anonymous interactions such as reading posts
-/// and comments. This entity is critical for identifying unauthenticated
-/// behavior and ensuring fair rate limiting. The system does not require
-/// authentication for guest access, so no credentials are stored. This model
-/// exists as a primary entity to accurately track anonymous usage patterns
-/// in user analytics and system monitoring.
+/// Guest account entity that represents unauthenticated users with read-only
+/// access to public content. This table enforces that all operations
+/// requiring authentication are blocked at the data layer, and no
+/// user-specific state is persisted. Used to prevent unauthorized access to
+/// write operations.
 ///
 /// @namespace Actors
 /// @author AutoBE - https://github.com/wrtnlabs/autobe
-model communitybbs_guest {
+model community_platform_guest {
   //----
   // COLUMNS
   //----
   /// Primary Key.
   id String @id
   
-  /// The public IP address of the guest user. Used for rate limiting, abuse
-  /// detection, and analytics. Not human-readable identifier.
-  ip_address String
+  /// Timestamp when the guest session began. This field tracks access time for
+  /// analytics but does not store persistent user state.
+  created_at DateTime
   
-  /// Default display name for unauthenticated users. May be null. When no
-  /// display name is provided, system defaults to "Anonymous".
+  /// IP address of the guest user. Used for analytics and spam detection. Not
+  /// used for authentication.
+  ip_address String?
+  
+  //----
+  // RELATIONS
+  //----
+  @@index([created_at])
+  @@index([ip_address])
+}
+
+/// Member account entity that represents authenticated users with full
+/// participation rights including posting, commenting, voting, and joining
+/// communities. This table stores authentication credentials and user
+/// preferences. Member accounts own all content they create and can
+/// edit/delete only their own content.
+///
+/// @namespace Actors
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model community_platform_member {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// User's email address used for authentication and communication. Must be
+  /// unique across all members.
+  email String
+  
+  /// Hashed password for authentication. Never stores plain text passwords.
+  /// Required for member login according to authentication requirements.
+  password_hash String
+  
+  /// Optional display name for posts and comments. If empty, system defaults
+  /// to 'Anonymous'. Length constrained to 32 characters by business rules.
   display_name String?
   
-  /// Timestamp when this guest session was first recorded.
+  /// Timestamp when the member account was created. Used for user onboarding
+  /// analytics and account age calculation.
   created_at DateTime
   
-  /// Timestamp when this guest's IP address or display name was last updated.
-  updated_at DateTime
+  /// Timestamp of the member's last successful login. Used to determine
+  /// session validity and user activity status.
+  last_login_at DateTime?
+  
+  /// Soft delete timestamp. When set, the member account is considered
+  /// deactivated but persisted for audit trail purposes. Required for soft
+  /// delete capability per requirements.
+  deleted_at DateTime?
   
   //----
   // RELATIONS
   //----
-  @@unique([ip_address])
+  community_platform_admin community_platform_admin?
+  community_platform_posts community_platform_posts[]
+  community_platform_comments community_platform_comments[]
+  community_platform_post_votes community_platform_post_votes[]
+  community_platform_comment_votes community_platform_comment_votes[]
+  community_platform_user_communities community_platform_user_communities[]
+  
+  @@unique([email])
   @@index([created_at])
-  @@index([updated_at])
+  @@index([last_login_at])
+  @@index([deleted_at])
 }
 
-/// Represents an authenticated regular user who can create, edit, and vote
-/// on content. Members have login credentials and active sessions. They can
-/// join communities, post, comment, and vote. This is a primary entity with
-/// core identity and authorization state. It references a session for
-/// persistent authentication and is linked to all user-generated content
-/// through foreign keys in other tables. This model is essential for
-/// enforcing ownership and access control rules as defined in the
-/// requirements.
+/// Admin account entity that represents privileged members with elevated
+/// permissions including moderation and content deletion. Admins inherit all
+/// member privileges and can override content ownership restrictions. This
+/// table ensures admin privileges are isolated and auditable, with admin
+/// role enforced server-side.
 ///
 /// @namespace Actors
 /// @author AutoBE - https://github.com/wrtnlabs/autobe
-model communitybbs_member {
+model community_platform_admin {
   //----
   // COLUMNS
   //----
   /// Primary Key.
   id String @id
   
-  /// Unique email address used as the primary login identifier. Must be a
-  /// valid email format and unique across all users.
-  email String
+  /// Reference to the underlying member account. Admin is a privilege level
+  /// granted to an existing member. {@link community_platform_member.id}.
+  member_id String
   
-  /// BCrypt-hashed password for authentication. Never stored in plain text.
-  /// Required for login functionality.
-  password_hash String
-  
-  /// User's chosen display name used in UI for comments and posts. Defaults to
-  /// username if not set. Max 32 characters as per requirements.
-  display_name String
-  
-  /// Timestamp when this member account was created.
+  /// Timestamp when admin privileges were granted. Used for audit trail and
+  /// privilege duration analysis.
   created_at DateTime
   
-  /// Timestamp when this member's profile was last modified (e.g., display
-  /// name change).
-  updated_at DateTime
+  /// Soft delete timestamp. When set, admin privileges are revoked but audit
+  /// trail is preserved. Required for soft delete capability per requirements.
+  deleted_at DateTime?
   
   //----
   // RELATIONS
   //----
-  communitybbs_post communitybbs_post[]
-  communitybbs_comment communitybbs_comment[]
-  communitybbs_vote communitybbs_vote[]
-  communitybbs_session communitybbs_session[]
-  communitybbs_log communitybbs_log[]
+  member community_platform_member @relation(fields: [member_id], references: [id], onDelete: Cascade)
   
-  @@unique([email])
+  @@unique([member_id])
   @@index([created_at])
-  @@index([updated_at])
-}
-
-/// Represents a system administrator with elevated privileges including
-/// content moderation, community management, and user bans. This role has
-/// direct access to administrative functions and overrides member
-/// permissions. Administrators are manually assigned and require explicit
-/// authentication. This entity is primary because administrators must be
-/// independently identifiable, auditable, and manageable through API
-/// endpoints for system maintenance, not derived from member roles.
-///
-/// @namespace Actors
-/// @author AutoBE - https://github.com/wrtnlabs/autobe
-model communitybbs_administrator {
-  //----
-  // COLUMNS
-  //----
-  /// Primary Key.
-  id String @id
-  
-  /// References the active session for this administrator. {@link
-  /// communitybbs_session.id}.
-  session_id String
-  
-  /// Unique email address used as the primary login identifier. Must be a
-  /// valid email format and unique across all users.
-  email String
-  
-  /// BCrypt-hashed password for authentication. Never stored in plain text.
-  /// Required for login functionality.
-  password_hash String
-  
-  /// Admin's display name used in moderation logs and UI. For clarity in audit
-  /// trails.
-  display_name String
-  
-  /// Timestamp when this administrator account was created.
-  created_at DateTime
-  
-  /// Timestamp when this administrator's profile was last modified.
-  updated_at DateTime
-  
-  //----
-  // RELATIONS
-  //----
-  session communitybbs_session @relation(fields: [session_id], references: [id], onDelete: Cascade)
-  
-  @@unique([session_id])
-  
-  @@unique([email])
-  @@index([created_at])
-  @@index([updated_at])
-  @@index([session_id])
+  @@index([deleted_at])
 }

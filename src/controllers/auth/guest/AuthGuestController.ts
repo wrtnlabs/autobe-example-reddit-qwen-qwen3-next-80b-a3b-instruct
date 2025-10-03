@@ -1,54 +1,56 @@
 import { Controller } from "@nestjs/common";
-import { TypedRoute, TypedBody } from "@nestia/core";
+import { TypedRoute } from "@nestia/core";
 import typia from "typia";
-import { postauthGuestJoin } from "../../../providers/postauthGuestJoin";
+import { postAuthGuestJoin } from "../../../providers/postAuthGuestJoin";
 import { GuestAuth } from "../../../decorators/GuestAuth";
 import { GuestPayload } from "../../../decorators/payload/GuestPayload";
-import { postauthGuestRefresh } from "../../../providers/postauthGuestRefresh";
+import { postAuthGuestRefresh } from "../../../providers/postAuthGuestRefresh";
 
-import { ICommunitybbsMember } from "../../../api/structures/ICommunitybbsMember";
+import { ICommunityPlatformGuest } from "../../../api/structures/ICommunityPlatformGuest";
 
 @Controller("/auth/guest")
 export class AuthGuestController {
   /**
-   * Registers a guest user as a member by creating a new member record and
-   * issuing initial JWT tokens.
+   * Creates temporary guest account for read-only access to public content.
    *
-   * This authorization operation enables unauthenticated guests to register as
-   * members of the Community BBS platform. The operation is triggered when a
-   * user initiates the account creation flow, translating the guest state into
-   * a persistent member identity. The implementation is governed by the
-   * communitybbs_member data model, which enforces strict requirements: the
-   * email field must be unique and contain a valid email format; the
-   * password_hash is securely stored using BCrypt encryption; and the
-   * display_name is mandatory, defaulting to "Anonymous" if not provided. The
-   * operation creates a new record in the communitybbs_member table with the
-   * submitted credentials, automatically generating a unique UUID for the id
-   * field. Concurrently, a corresponding session record is initiated in the
-   * communitybbs_session table with a cryptographically secure token, an
-   * expiration timestamp, and an active status marked as true. The operation
-   * references no fields beyond those defined in the communitybbs_member
-   * schema, meaning it does not rely on or update any denormalized fields such
-   * as last_active_at or updated_at, as those are handled by the application
-   * layer following successful creation. This flow integrates directly with the
-   * platform's authentication workflow, where a successful join operation
-   * immediately provides access to all member-only functionalities including
-   * posting, commenting, voting, and community joining. The operation does not
-   * support password recovery or token refresh; those are separate concerns
-   * handled by their own dedicated endpoints. Security considerations include
-   * ensuring password hashes are never transmitted in plaintext and that
-   * validation is performed strictly server-side. The operation is stateless
-   * and idempotent, meaning repeated execution with identical credentials will
-   * fail due to the unique email constraint. A successful response will include
-   * the newly generated member's email and display_name in the response body,
-   * formatted as ICommunitybbsMember.IAuthorized, following the required DTO
-   * naming pattern for authentication operations. This operation is the only
-   * authorized path for a guest to transition into a member, and all other user
-   * interactions are blocked until this step is successfully completed.
+   * This API operation generates a temporary guest session for unauthenticated
+   * users who wish to browse public content on the community platform. The
+   * guest account enables users to view all posts, comments, and communities
+   * while restricting access to interactive features like posting, commenting,
+   * voting, and community membership—all of which require proper
+   * authentication.
+   *
+   * The operation creates an entry in the community_platform_guest table with a
+   * unique UUID identifier and an audit timestamp, capturing the IP address if
+   * available for analytics and spam detection purposes. This temporary session
+   * does not persist user preferences or account details, ensuring compliance
+   * with the platform security model where only authenticated members have
+   * persistent identities.
+   *
+   * This guest session is explicitly designed to align with the business
+   * requirement that 'reading is open to everyone' while maintaining the
+   * separation between read and write operations. The guest account remains
+   * active only for the duration of the session and is not tied to any
+   * persistent user state. When the user attempts to perform any privileged
+   * action (like joining a community), the system will prompt authentication,
+   * and the guest session will be seamlessly replaced with a proper member
+   * account.
+   *
+   * Security is maintained by ensuring the guest account has no permissions
+   * beyond read access and cannot be used for any form of content modification.
+   * The guest session does not generate tokens that can be used to access any
+   * edit or write endpoints, ensuring strict adherence to the requirement that
+   * 'ownership is account-based.' The guest joining process is intentionally
+   * limited to initiating session-based access without creating an account that
+   * persists beyond the current browsing session.
+   *
+   * This operation must preceded by the user requesting access to the platform
+   * and must be followed by any subsequent reads of content. After
+   * authentication, the guest session is effectively replaced by a member
+   * session, and all previous guest activities are isolated and
+   * non-persistent.
    *
    * @param connection
-   * @param body Request body for registering a new member from guest state.
-   *   Contains required credentials and optional display preferences.
    * @setHeader token.access Authorization
    *
    * @nestia Generated by Nestia - https://github.com/samchon/nestia
@@ -57,13 +59,10 @@ export class AuthGuestController {
   public async join(
     @GuestAuth()
     guest: GuestPayload,
-    @TypedBody()
-    body: ICommunitybbsMember.ICreate,
-  ): Promise<ICommunitybbsMember.IAuthorized> {
+  ): Promise<ICommunityPlatformGuest.IAuthorized> {
     try {
-      return await postauthGuestJoin({
+      return await postAuthGuestJoin({
         guest,
-        body,
       });
     } catch (error) {
       console.log(error);
@@ -72,35 +71,38 @@ export class AuthGuestController {
   }
 
   /**
-   * Refreshes a temporary session token for a guest user to maintain anonymous
-   * access.
+   * Refreshes temporary guest session token to extend read-only access to
+   * public content.
    *
-   * This authorization operation permits authenticated guest users to extend
-   * their temporary access duration by refreshing the session token, without
-   * requiring credentials. Guests, by definition, do not authenticate with
-   * email/password but are assigned temporary token-based sessions to maintain
-   * state during their anonymous browsing. This operation references the
-   * communitybbs_session table exclusively, validating the provided refresh
-   * token against the token field and checking its expires_at and is_valid
-   * fields. When valid, the system generates a new set of tokens, updates the
-   * last_activity_at field to the current timestamp to extend session
-   * viability, and returns a new token pair. No fields from the
-   * communitybbs_guest table are modified during this operation, as the guest
-   * entity only stores immutable data like ip_address and display_name. This
-   * operation does not perform any validation on the email or password fields
-   * because these do not exist for guest users. The refresh process is
-   * stateless and token-bound, relying entirely on the integrity of the token
-   * stored in the session record. This operation is crucial for maintaining a
-   * fluid user experience as described in the functional requirements, allowing
-   * guests to browse for extended periods without login interruptions. The
-   * operation responds with a new token set that must be used for subsequent
-   * requests; the previously issued tokens are immediately invalidated. This
-   * endpoint is protected only by the correctness of the token itself, not by
-   * any user credentials, and follows the authentication workflow defined for
-   * non-authenticated sessions. Response body follows the
-   * ICommunitybbsMember.IAuthorized pattern to maintain consistency in token
-   * responses across guest and member flows, even though no member entity
-   * exists.
+   * This API operation extends the validity period of a Guest user session by
+   * generating a new access token, enabling continuous read-only access to
+   * public content without requiring re-authentication. The refresh operation
+   * is essential for maintaining seamless user experience during extended
+   * browsing sessions while preserving the security boundary that distinguishes
+   * guest (unauthenticated) from member (authenticated) users.
+   *
+   * The refresh endpoint consumes a valid guest session token—typically
+   * acquired via the /auth/guest/join endpoint—and returns a new token pair
+   * with updated expiration timestamps. This mechanism allows users to remain
+   * in 'read-only' mode for prolonged periods, aligning with the design
+   * principle that 'keep the login session generously long.' The system tracks
+   * the guest's IP address and timestamps to detect suspicious activity while
+   * maintaining user privacy.
+   *
+   * Because the guest role has no persistent identity or account state, the
+   * refresh operation cannot reassign permissions or grant additional
+   * privileges. It merely extends the life of the temporary, stateless session.
+   * When the user attempts any privileged action (post, comment, vote, join),
+   * the system will prompt authentication, at which point the guest session
+   * will be terminated and replaced with a member session if credentials are
+   * valid.
+   *
+   * This operation does not affect any user's ability to participate in the
+   * platform; it is purely a mechanism for maintaining read-only access to
+   * public content. The refresh cycle is governed by the platform's security
+   * policies, ensuring that guest sessions do not extend beyond reasonable
+   * limits, and does not provide a mechanism to circumvent authentication
+   * requirements for interactive features.
    *
    * @param connection
    * @setHeader token.access Authorization
@@ -111,9 +113,9 @@ export class AuthGuestController {
   public async refresh(
     @GuestAuth()
     guest: GuestPayload,
-  ): Promise<ICommunitybbsMember.IAuthorized> {
+  ): Promise<ICommunityPlatformGuest.IAuthorized> {
     try {
-      return await postauthGuestRefresh({
+      return await postAuthGuestRefresh({
         guest,
       });
     } catch (error) {

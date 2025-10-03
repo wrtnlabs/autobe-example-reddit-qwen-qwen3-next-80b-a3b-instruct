@@ -1,103 +1,66 @@
-/// Core entity representing a sub-community on the platform. This model
-/// stores all metadata about a community including its name, description,
-/// category, visual assets, rules, and activity tracking. Communities are
-/// independent entities that users can create, join, search, and explore.
-/// The name field is unique and serves as the community's identifier in URLs
-/// (e.g., /c/communityname). This table follows strict 3NF: all fields are
-/// atomic and depend solely on the primary key. No denormalization occurs
-/// here, as required by the requirements which specify direct storage of
-/// category, rules, and timestamps. Rules are stored as an array of strings
-/// as explicitly required by the business requirements.
+/// A sub-community on the platform where users gather around a specific
+/// topic. Communities have unique names, categories, and optional metadata
+/// like description, rules, logo, and banner. Member count is tracked in
+/// real-time. Communities are created by members and can be deleted by
+/// admins or creators. All community data is immutable except for
+/// description, logo, banner, and rules (by creator).
 ///
 /// @namespace Communities
 /// @author AutoBE - https://github.com/wrtnlabs/autobe
-model communitybbs_community {
+model community_platform_communities {
   //----
   // COLUMNS
   //----
   /// Primary Key.
   id String @id
   
-  /// The unique, lowercase identifier for the community used in URLs (e.g.
-  /// /c/ai). Must be between 3 and 32 characters and contain only alphanumeric
-  /// characters, hyphens (-), or underscores (_). This field is used for
-  /// global search and direct access. The uniqueness of this field is enforced
-  /// by a unique index.
+  /// Unique alphanumeric identifier for the community. May contain hyphens (-)
+  /// and underscores (_). Must be 5 to 64 characters long. Immutable after
+  /// creation.
   name String
   
-  /// A brief description of the community's purpose, up to 500 characters.
-  /// Used for discovery and the community info panel. May be empty but cannot
-  /// be longer than 500 characters.
-  description String?
-  
-  /// The topic category assigned to the community. Must be one of: ["Tech &
-  /// Programming", "Science", "Movies & TV", "Games", "Sports", "Lifestyle &
+  /// The predefined category this community belongs to. Must be one of: ["Tech
+  /// & Programming", "Science", "Movies & TV", "Games", "Sports", "Lifestyle &
   /// Wellness", "Study & Education", "Art & Design", "Business & Finance",
-  /// "News & Current Affairs"]. Used for filtering communities in the Explore
-  /// page and search results.
+  /// "News & Current Affairs"].
   category String
   
-  /// The URL to the community's logo image (PNG, JPG, GIF). Optional. If
-  /// empty, a default placeholder is used.
-  logo String?
+  /// Optional summary text with a maximum length of 500 characters. Describes
+  /// the community's purpose and rules.
+  description String?
   
-  /// The URL to the community's banner image (PNG, JPG, GIF). Optional. If
-  /// empty, a default placeholder is used.
-  banner String?
-  
-  /// An array of up to 10 community rules, each up to 100 characters long.
-  /// Displayed as numbered list 1 through 5 in the community info panel.
-  /// Stored as JSON-encoded array in database. Used to enforce community
-  /// guidelines. The requirement specifies direct array storage, so the field
-  /// is stored as a string[] type in Prisma with appropriate string array
-  /// mapping.
+  /// Optional community rules in plain text format. Each rule is one line. Up
+  /// to 20 rules allowed. Only the top 5 are displayed on UI.
   rules String?
   
-  /// The timestamp when this community was created. Used for sorting in
-  /// 'Recently Created' order and for audit trails. Never modified.
-  created_at DateTime
+  /// URL to the community's logo image. Supports PNG, JPG, SVG formats.
+  /// Optional. Defaults to placeholder if not provided.
+  logo_url String?
   
-  /// The timestamp of the last modification to the community's metadata. This
-  /// field is updated only when name, description, category, logo, banner, or
-  /// rules are changed. Never set manually; updated by application logic.
-  updated_at DateTime
+  /// URL to the community's banner image. Supports PNG, JPG formats. Optional.
+  /// Defaults to placeholder if not provided.
+  banner_url String?
   
-  /// The timestamp when this community was soft-deleted. If null, the
-  /// community is active. If set, the community is considered archived and
-  /// hidden from most UIs. Supports recovery. Required for soft delete
-  /// capability as per business logic.
-  deleted_at DateTime?
-  
-  /// The total number of users who have joined this community. Always derived
-  /// from active relationships to communitybbs_member, but stored for
-  /// performance and consistency in the explore page and community list.
-  /// Incremented when a user joins, decremented when they leave. Since this
-  /// value is critical to sorting and display and is referenced in early
-  /// codebase in requirement documentation, it is stored as a denormalized
-  /// field here, but it is NOT calculated here - it's kept in sync by
-  /// application logic via member join/leave events.
+  /// Current number of users who have joined this community. Updated in
+  /// real-time when users join or leave. Displayed as "1k" for ≥1000, "1m" for
+  /// ≥1000000.
   member_count Int
   
-  /// The timestamp of the most recent activity in this community, which can be
-  /// any of: a post created, a comment posted, a vote cast, or a user joining.
-  /// Used for ordering the 'Recent Communities' list in the sidebar and for
-  /// determining community activity. Updated on any of these events. The field
-  /// is stored here for performance and ensures consistence with client-side
-  /// feeds.
-  last_active_at DateTime
+  /// Timestamp when this community was created. Used for sorting in "Recently
+  /// Created" search and internal audit tracking.
+  created_at DateTime
   
   //----
   // RELATIONS
   //----
-  communitybbs_post communitybbs_post[]
-  communitybbs_search_post communitybbs_search_post[]
-  communitybbs_search_community communitybbs_search_community?
-  communitybbs_search_comment communitybbs_search_comment[]
-  communitybbs_log communitybbs_log[]
+  community_platform_posts community_platform_posts[]
+  community_platform_user_communities community_platform_user_communities[]
+  community_platform_search_communities community_platform_search_communities?
+  community_platform_search_posts community_platform_search_posts[]
+  community_platform_search_comments community_platform_search_comments[]
+  community_platform_community_stats community_platform_community_stats?
   
   @@unique([name])
   @@index([category])
   @@index([created_at])
-  @@index([last_active_at])
-  @@index([member_count])
 }
